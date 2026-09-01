@@ -13,19 +13,49 @@ def enviar_msg(socket_conexao, mensagem):
     socket_conexao.sendall(linha.encode("utf-8")) #converte a string em bytes
     #sendall : metodo que envia os bytes pela conexao (garante integridade)
 
-def receber_msg(socket_conexao): #ler os dados
-    texto_recebido = ""
-    while True:
-        pedaco=socket_conexao.recv(1) #recv: metodo que le os dados que chegam pela rede (1: 1 byte)
 
+def receber_msg(socket_conexao): 
+    dados = b""
+
+    while True:
+        pedaco = socket_conexao.recv(1024)
         if not pedaco:
             raise ConnectionError("Conexão encerrada antes do esperado")
 
-        texto_recebido+=pedaco.decode("utf-8") #converte para a string de volta 
 
-        if texto_recebido.endswith("\n"):
+        dados += pedaco
+
+        if b"\n" in dados:
+
             break
 
-    return json.loads(texto_recebido.strip()) #converte do formato json p dicinario python. 
-    
-    
+        linha, _, _ = dados.partition(b"\n")
+
+        return json.loads(linha.decode("utf-8"))
+
+    def main():
+
+        servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+
+        servidor.bind((HOST, PORT))
+
+        servidor.listen(1)
+
+
+        print(f"server aguardando conexão em {HOST}:{PORT}\n")
+
+        try:
+            conexao, endereco = servidor.accept()
+            print(f"Cliente conectado: {endereco}")
+            conexao.close()
+
+        finally:
+
+            servidor.close()
+
+if __name__ == "__main__":
+    main()
+
