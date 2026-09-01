@@ -8,3 +8,5 @@ Neste commit, foi implementada a base da comunicação entre cliente e servidor 
 COMMIT 2
 Neste commit, foi implementada e testada a comunicação inicial entre cliente e servidor utilizando sockets TCP. O cliente passou a estabelecer a conexão com o servidor e enviar uma mensagem de handshake estruturada em JSON, enquanto o servidor foi preparado para receber, decodificar e interpretar essa mensagem. Também foram corrigidos problemas de recebimento e estruturação das mensagens, estabelecendo a base necessária para a etapa de validação do handshake.
 
+COMMIT 3
+Neste commit, foi implementada a etapa de validação e confirmação do handshake. O servidor passou a verificar os parâmetros recebidos do cliente, como modo de operação, protocolo, tamanho máximo do texto e tamanho da janela, identificando configurações válidas ou inválidas. Também foi implementada a resposta HANDSHAKE_ACK, permitindo ao servidor informar ao cliente se a configuração foi aceita ou rejeitada.
