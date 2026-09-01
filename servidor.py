@@ -29,11 +29,11 @@ def receber_msg(socket_conexao):
 
             break
 
-        linha, _, _ = dados.partition(b"\n")
+    linha, _, _ = dados.partition(b"\n")
 
-        return json.loads(linha.decode("utf-8"))
+    return json.loads(linha.decode("utf-8"))
 
-    def main():
+def main():
 
         servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -50,6 +50,9 @@ def receber_msg(socket_conexao):
         try:
             conexao, endereco = servidor.accept()
             print(f"Cliente conectado: {endereco}")
+            mensagem = receber_msg(conexao)
+            print("Mensagem recebida")
+
             conexao.close()
 
         finally:
