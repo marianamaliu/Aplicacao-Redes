@@ -1,7 +1,6 @@
-````markdown
 ## Checkpoint 1 – Handshake e Sockets
 
-**Alunos:** Felipe Lemos, Diego Gomes, Natan Luís, Sophia Brito, Felipe Braz, Mariana Maliu, Arthur Coelho, Daniel Bezerra e Luana Fernandes
+Alunos: Felipe Lemos, Diego Gomes, Natan Luís, Sophia Brito, Felipe Braz, Mariana Maliu, Arthur Coelho, Daniel Bezerra e Luana Fernandes
 
 ---
 
@@ -17,15 +16,15 @@ A ideia é que o cliente envie as informações necessárias para iniciar a comu
 
 A comunicação foi implementada em Python utilizando a biblioteca `socket`.
 
-O servidor utiliza a porta **2000** e fica aguardando conexões. O cliente se conecta utilizando o endereço `127.0.0.1`, permitindo que os testes sejam realizados localmente.
+O servidor utiliza a porta 2000 e fica aguardando conexões. O cliente se conecta utilizando o endereço `127.0.0.1`, permitindo que os testes sejam realizados localmente.
 
-As mensagens são enviadas em formato **JSON**, utilizando `\n` para indicar o final de cada mensagem.
+As mensagens são enviadas em formato JSON, utilizando `\n` para indicar o final de cada mensagem.
 
 O fluxo básico ficou:
 
-**Cliente → Servidor:** conexão + `HANDSHAKE`
+Cliente → Servidor: conexão + `HANDSHAKE`
 
-**Servidor → Cliente:** `HANDSHAKE_ACK`
+Servidor → Cliente: `HANDSHAKE_ACK`
 
 ---
 
@@ -35,9 +34,9 @@ O handshake foi criado para que o cliente e o servidor possam definir os parâme
 
 O cliente envia:
 
-- **Modo:** lote ou individual;
-- **Protocolo:** GBN ou SR;
-- **Tamanho máximo do texto:** atualmente 100 caracteres.
+* Modo: lote ou individual;
+* Protocolo: GBN ou SR;
+* Tamanho máximo do texto: atualmente 100 caracteres.
 
 No código atual, o cliente envia:
 
@@ -46,11 +45,11 @@ tipo: HANDSHAKE
 modo: lote
 protocolo: GBN
 max_texto: 100
-````
+```
 
-Ao receber essas informações, o servidor verifica se o modo e o protocolo são válidos e se o tamanho máximo do texto é de pelo menos **30 caracteres**.
+Ao receber essas informações, o servidor verifica se o modo e o protocolo são válidos e se o tamanho máximo do texto é de pelo menos 30 caracteres.
 
-A janela é definida pelo servidor e, nesta primeira implementação, começa com o valor **5**.
+A janela é definida pelo servidor e, nesta primeira implementação, começa com o valor 5.
 
 Quando o handshake é aceito, o servidor envia uma resposta com o status e os parâmetros definidos para a comunicação.
 
@@ -99,12 +98,19 @@ As sugestões recebidas foram testadas no código.
 ### Prompts utilizados
 
 1. Como começo a fazer a comunicação entre o cliente e o servidor usando socket em Python?
+
 2. Nesse código, como funciona o socket e qual a diferença entre sendall e recv?
+
 3. Como eu posso organizar as mensagens que vou trocar entre cliente e servidor usando JSON?
+
 4. Como posso fazer um handshake para o cliente enviar as informações iniciais para o servidor?
+
 5. Como faço para o servidor verificar se as informações que recebeu no handshake estão corretas?
-6. Pode olhar esse código e me dizer onde está o problema? O cliente não está conseguindo receber a resposta do servidor
+
+6. Pode olhar esse código e me dizer onde está o problema? O cliente não está conseguindo receber a resposta do servidor.
+
 7. Como faço para a janela ser definida pelo servidor e enviada de volta para o cliente?
+
 8. Testei o cliente e o servidor, mas quero saber se o handshake está funcionando como deveria. O que preciso verificar?
 
 ---
@@ -112,6 +118,3 @@ As sugestões recebidas foram testadas no código.
 ## 6. Conclusão
 
 Neste checkpoint, conseguimos implementar a comunicação entre o cliente e o servidor e realizar o handshake com os parâmetros definidos. Os testes realizados confirmaram o funcionamento dessa primeira etapa e deixaram a base preparada para o desenvolvimento das próximas partes do trabalho.
-
-```
-```
