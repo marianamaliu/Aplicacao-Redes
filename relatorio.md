@@ -10,3 +10,7 @@ Neste commit, foi implementada e testada a comunicação inicial entre cliente e
 
 COMMIT 3
 Neste commit, foi implementada a etapa de validação e confirmação do handshake. O servidor passou a verificar os parâmetros recebidos do cliente, como modo de operação, protocolo, tamanho máximo do texto e tamanho da janela, identificando configurações válidas ou inválidas. Também foi implementada a resposta HANDSHAKE_ACK, permitindo ao servidor informar ao cliente se a configuração foi aceita ou rejeitada.
+
+
+COMMIT 4
+ Neste commit, foi ajustada a negociação da janela para que seu valor seja definido pelo servidor, utilizando a configuração inicial de 5, em vez de ser definido pelo cliente. Também foi atualizado o `HANDSHAKE_ACK` para retornar a janela determinada pelo servidor e mantida a confirmação dos parâmetros do handshake no cliente.
