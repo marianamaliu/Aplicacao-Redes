@@ -9,7 +9,7 @@ TAMAN_MIN_TEXTO = 30 #texto
 def enviar_msg(socket_conexao, mensagem):
     linha=json.dumps(mensagem, ensure_ascii=False, ) +'\n' #transforma no formato json
     socket_conexao.sendall(linha.encode("utf-8")) #converte a string em bytes
-    #sendall : metodo que envia os bytes pela conexao (garante integridade)
+    
 
 
 def receber_msg(socket_conexao): 
@@ -44,11 +44,6 @@ def validar_handshake(mensagem):
     if mensagem.get("max_texto", 0) < TAMAN_MIN_TEXTO:
         return False, f"tamanho minimo do texto é {TAMAN_MIN_TEXTO}"
 
-    janela = mensagem.get("janela", 0)
-
-    if janela < 1 or janela > JANELA_INICIAL:
-        return False, f"A janela deve estar entre 1 e {JANELA_INICIAL}"
-
     return True, "Handshake valido"
 def main():
 
@@ -80,7 +75,7 @@ def main():
                 print("Handshake valida")
 
                 resposta = {
-                    "tipo": "HANDSHAKE_ACK", "status": "OK", "modo": mensagem["modo"], "protocolo": mensagem["protocolo"], "max_texto": mensagem["max_texto"], "janela": mensagem["janela"]
+                    "tipo": "HANDSHAKE_ACK", "status": "OK", "modo": mensagem["modo"], "protocolo": mensagem["protocolo"], "max_texto": mensagem["max_texto"], "janela": JANELA_INICIAL
 
 
                 }

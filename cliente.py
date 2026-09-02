@@ -29,10 +29,11 @@ def receber_msg(socket_conexao):
 
 def main():
     cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    cliente.connect((HOST, PORT))
+    
     try:
+        cliente.connect((HOST, PORT))
         print(f"conectado ao server {HOST}:{PORT}")
-        handshake = {"tipo": "HANDSHAKE", "modo": "lote", "protocolo": "GBN", "max_texto": 100, "janela": 5}
+        handshake = {"tipo": "HANDSHAKE", "modo": "lote", "protocolo": "GBN", "max_texto": 100}
         enviar_msg(cliente, handshake)
 
         print("Handshake enviado")
