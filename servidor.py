@@ -67,6 +67,8 @@ def main():
         try:
             conexao, endereco = servidor.accept()
             print(f"Cliente conectado: {endereco}")
+
+
             mensagem = receber_msg(conexao)
             print("Mensagem recebida:")
 
@@ -92,6 +94,8 @@ def main():
                 }
 
             enviar_msg(conexao, resposta)
+
+            print("resposta enviada ao cliente")
 
 
             conexao.close()

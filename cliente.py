@@ -38,7 +38,16 @@ def main():
         print("Handshake enviado")
 
         resposta = receber_msg(cliente)
-        print("Resposta do server: ", resposta)
+        if resposta.get("status") == "OK":
+                 print("Handshake aprovado pelo servidor.")
+                 print(f"Modo: {resposta['modo']}")
+                 print(f"Protocolo: {resposta['protocolo']}")
+                 print(f"Tamanho máximo do texto: {resposta['max_texto']}")
+                 print(f"Tamanho da janela: {resposta['janela']}")
+
+        else:
+             print("Handshake rejeitado pelo servidor.")
+             print(f"Motivo: {resposta.get('motivo')}")
 
     except ConnectionRefusedError:
             print("Não foi possível conectar ao servidor.")
