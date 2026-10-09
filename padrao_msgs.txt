@@ -1,6 +1,6 @@
 Padrão de requisições e mensagens
 
-Client-side:
+########### Client-side: #############
 
 Conectado ao servidor 127.0.0.1:2000
 SYN enviado (seq=293991313)
@@ -33,7 +33,7 @@ OU
 [CLIENTE] Enviando pacote seq=1 payload="mund"
 [CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
 
-Server-side:
+####### Server-side: ########
 
 Cliente conectado: ('127.0.0.1', 45800)
 SYN recebido:
