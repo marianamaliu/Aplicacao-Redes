@@ -22,7 +22,7 @@ Tamanho da janela: 3
 [CLIENTE] Enviando pacote seq=1 payload="mund" 
 [CLIENTE] Enviando pacote seq=2 payload="o tu" OU somente Enviando pacote seq=1 payload="mund" (SR)
 [CLIENTE] Enviando pacote seq=3 payload="do b"
-[CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
+[SUCCESS] Lote enviado corretamente (ACK) time=3ms (VERDE)
 
 OU 
 
@@ -31,7 +31,7 @@ OU
 [CLIENTE] Enviando pacote seq=0 payload="olá "(AZUL)
 [CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
 [CLIENTE] Enviando pacote seq=1 payload="mund"
-[CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
+[SUCCESS] Lote enviado corretamente (ACK) time=3ms (VERDE)
 
 ####### Server-side: ########
 
@@ -50,7 +50,7 @@ ACK recebido:
 {'tipo': 'ACK', 'syn': 0, 'seq': 1687421453, 'ack': 3301402458}
 Handshake de três vias concluído; aguardando a próxima etapa, sem troca de dados.
 
-[SERVIDOR] Pacote recebido: seq=0 checksum=0x1A2B payload="olá "
+[SERVIDOR] Pacote recebido: seq=0 checksum=0x1A2B payload="olá " (AMARELO)
 [SERVIDOR] Pacote recebido: seq=1 checksum=0x3C4D payload="mund"
 ...
 [SERVIDOR] Mensagem completa: "olá mundo, tudo bem?"
