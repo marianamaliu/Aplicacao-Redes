@@ -9,20 +9,29 @@ Handshake de três vias concluído; nenhuma mensagem de dados foi enviada.
 Modo: lote
 Protocolo: GBN
 Tamanho máximo do texto: 100
-Tamanho da janela: 5
+Tamanho da janela: 3
 
 [CLIENTE] Digite a mensagem: olá mundo, tudo bem?
 [CLIENTE] Modo: em lote
 [CLIENTE] Tamanho dos lotes (qtd de caracteres): 4
 
-[CLIENTE] Enviando pacote seq=0 payload="olá "
+[CLIENTE] Enviando pacote seq=0 payload="olá "(AZUL)
 [CLIENTE] Enviando pacote seq=1 payload="mund"
+[CLIENTE] Enviando pacote seq=2 payload="o tu"
+[WARNING] Pacote 1 excedeu o tempo de envio. Reenviando... (VERMELHO) 
+[CLIENTE] Enviando pacote seq=1 payload="mund" 
+[CLIENTE] Enviando pacote seq=2 payload="o tu" OU somente Enviando pacote seq=1 payload="mund" (SR)
+[CLIENTE] Enviando pacote seq=3 payload="do b"
+[CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
 
 OU 
 
 [CLIENTE] Digite a mensagem: olá mundo, tudo bem?
 [CLIENTE] Modo: isolado
-[CLIENTE] mensagem enviada e recebida com sucesso!!
+[CLIENTE] Enviando pacote seq=0 payload="olá "(AZUL)
+[CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
+[CLIENTE] Enviando pacote seq=1 payload="mund"
+[CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
 
 Server-side:
 
