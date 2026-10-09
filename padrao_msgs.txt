@@ -1,0 +1,52 @@
+Padrão de requisições e mensagens
+
+Client-side:
+
+Conectado ao servidor 127.0.0.1:2000
+SYN enviado (seq=293991313)
+ACK enviado (seq=293991314, ack=1998083033)
+Handshake de três vias concluído; nenhuma mensagem de dados foi enviada.
+Modo: lote
+Protocolo: GBN
+Tamanho máximo do texto: 100
+Tamanho da janela: 5
+
+[CLIENTE] Digite a mensagem: olá mundo, tudo bem?
+[CLIENTE] Modo: em lote
+[CLIENTE] Tamanho dos lotes (qtd de caracteres): 4
+
+[CLIENTE] Enviando pacote seq=0 payload="olá "
+[CLIENTE] Enviando pacote seq=1 payload="mund"
+
+OU 
+
+[CLIENTE] Digite a mensagem: olá mundo, tudo bem?
+[CLIENTE] Modo: isolado
+[CLIENTE] mensagem enviada e recebida com sucesso!!
+
+Server-side:
+
+Cliente conectado: ('127.0.0.1', 45800)
+SYN recebido:
+{   'tipo': 'SYN',
+    'syn': 1,
+    'seq': 1687421452, 
+    'ack': 0, 
+    'modo': 'lote', 
+    'protocolo': 'GBN', 
+    'max_texto': 100
+}
+SYN-ACK enviado
+ACK recebido:
+{'tipo': 'ACK', 'syn': 0, 'seq': 1687421453, 'ack': 3301402458}
+Handshake de três vias concluído; aguardando a próxima etapa, sem troca de dados.
+
+[SERVIDOR] Pacote recebido: seq=0 checksum=0x1A2B payload="olá "
+[SERVIDOR] Pacote recebido: seq=1 checksum=0x3C4D payload="mund"
+...
+[SERVIDOR] Mensagem completa: "olá mundo, tudo bem?"
+
+OU
+
+[SERVIDOR] Pacote recebido: seq=0 checksum=0x1A2B
+[SERVIDOR] Mensagem completa: "olá mundo, tudo bem?"
