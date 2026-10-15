@@ -5,6 +5,12 @@ import secrets
 HOST = "127.0.0.1"
 PORT = 2000
 LIMITE_SEQ = 1 << 32
+MODOS = ["individual", "lote"]
+PROTOCOLOS = ["GBN", "SR"]
+
+
+def eh_inteiro(valor):
+    return type(valor) is int
 
 
 def proximo_seq(numero):
@@ -16,69 +22,132 @@ def enviar_msg(socket_conexao, mensagem):
     socket_conexao.sendall(linha.encode("utf-8"))
 
 
-def receber_msg(socket_conexao):
-    dados = b""
+def receber_msg(leitor):
+    linha = leitor.readline()
+    if not linha:
+        raise ConnectionError("Conexão encerrada pelo servidor")
+
+    mensagem = json.loads(linha)
+    if not isinstance(mensagem, dict):
+        raise ValueError("Mensagem recebida não é um objeto JSON")
+    return mensagem
+
+
+def escolher_opcao(pergunta, opcoes):
     while True:
-        pedaco = socket_conexao.recv(1024)
-        if not pedaco:
-            raise ConnectionError("Conexão encerrada")
+        resposta = input(f"{pergunta} ({'/'.join(opcoes)}): ").strip()
+        for opcao in opcoes:
+            if resposta.lower() == opcao.lower():
+                return opcao
+        print(f"Opção inválida. Escolha entre: {', '.join(opcoes)}")
 
-        dados += pedaco
-        if b"\n" in dados:
-            break
 
-    linha, _, _ = dados.partition(b"\n")
-    return json.loads(linha.decode("utf-8"))
+def escolher_inteiro(pergunta):
+    while True:
+        resposta = input(f"{pergunta}: ").strip()
+        if resposta.isdigit():
+            return int(resposta)
+        print("Digite um número inteiro positivo.")
+
+
+def validar_syn_ack(mensagem, client_isn, syn):
+    if mensagem.get("tipo") != "SYN_ACK" or not eh_inteiro(mensagem.get("syn")) or mensagem["syn"] != 1:
+        return False, "Segmento SYN-ACK inválido"
+
+    if mensagem.get("status") != "OK":
+        return False, mensagem.get("motivo", "motivo não informado")
+
+    server_isn = mensagem.get("seq")
+    if not eh_inteiro(server_isn) or not 0 <= server_isn < LIMITE_SEQ:
+        return False, "Número de sequência do servidor inválido"
+
+    if not eh_inteiro(mensagem.get("ack")) or mensagem["ack"] != proximo_seq(client_isn):
+        return False, "Número ACK do servidor inválido"
+
+    for campo in ["modo", "protocolo", "max_texto"]:
+        if mensagem.get(campo) != syn[campo]:
+            return False, f"Servidor respondeu com '{campo}' diferente do solicitado"
+
+    janela = mensagem.get("janela")
+    if not eh_inteiro(janela) or janela < 1:
+        return False, "Tamanho de janela inválido"
+
+    return True, "SYN-ACK válido"
+
+
+def realizar_handshake(cliente, leitor, modo, protocolo, max_texto):
+    client_isn = secrets.randbits(32)
+    syn = {
+        "tipo": "SYN",
+        "syn": 1,
+        "seq": client_isn,
+        "ack": 0,
+        "modo": modo,
+        "protocolo": protocolo,
+        "max_texto": max_texto,
+    }
+    enviar_msg(cliente, syn)
+    print(f"SYN enviado (seq={client_isn})")
+
+    syn_ack = receber_msg(leitor)
+    valido, motivo = validar_syn_ack(syn_ack, client_isn, syn)
+    if not valido:
+        print("Handshake rejeitado.")
+        print(f"Motivo: {motivo}")
+        return None
+
+    server_isn = syn_ack["seq"]
+    ack = {
+        "tipo": "ACK",
+        "syn": 0,
+        "seq": proximo_seq(client_isn),
+        "ack": proximo_seq(server_isn),
+    }
+    enviar_msg(cliente, ack)
+    print(f"ACK enviado (seq={ack['seq']}, ack={ack['ack']})")
+    print("Handshake de três vias concluído; nenhuma mensagem de dados foi enviada.")
+
+    return {
+        "seq_inicial": proximo_seq(client_isn),
+        "ack_servidor": proximo_seq(server_isn),
+        "modo": syn_ack["modo"],
+        "protocolo": syn_ack["protocolo"],
+        "max_texto": syn_ack["max_texto"],
+        "janela": syn_ack["janela"],
+    }
 
 
 def main():
+    print("Configuração da conexão")
+    modo = escolher_opcao("Modo de operação", MODOS)
+    protocolo = escolher_opcao("Protocolo", PROTOCOLOS)
+    max_texto = escolher_inteiro("Tamanho máximo do texto")
+    print()
+
     cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    leitor = None
 
     try:
         cliente.connect((HOST, PORT))
         print(f"Conectado ao servidor {HOST}:{PORT}")
+        leitor = cliente.makefile("r", encoding="utf-8")
 
-        client_isn = secrets.randbits(32)
-        syn = {
-            "tipo": "SYN",
-            "syn": 1,
-            "seq": client_isn,
-            "ack": 0,
-            "modo": "lote",
-            "protocolo": "GBN",
-            "max_texto": 100,
-        }
-        enviar_msg(cliente, syn)
-        print(f"SYN enviado (seq={client_isn})")
-
-        syn_ack = receber_msg(cliente)
-                
-        if syn_ack.get("status") != "OK":
-            print("Handshake rejeitado pelo servidor.")
-            print(f"Motivo: {syn_ack.get('motivo', 'motivo não informado')}")
+        sessao = realizar_handshake(cliente, leitor, modo, protocolo, max_texto)
+        if sessao is None:
             return
-        server_isn = syn_ack.get("seq")
 
-        ack = {
-            "tipo": "ACK",
-            "syn": 0,
-            "seq": proximo_seq(client_isn),
-            "ack": proximo_seq(server_isn),
-        }
-        enviar_msg(cliente, ack)
-        print(f"ACK enviado (seq={ack['seq']}, ack={ack['ack']})")
-        print("Handshake de três vias concluído; nenhuma mensagem de dados foi enviada.")
-
-        print(f"Modo: {syn_ack['modo']}")
-        print(f"Protocolo: {syn_ack['protocolo']}")
-        print(f"Tamanho máximo do texto: {syn_ack['max_texto']}")
-        print(f"Tamanho da janela: {syn_ack['janela']}")
+        print(f"Modo: {sessao['modo']}")
+        print(f"Protocolo: {sessao['protocolo']}")
+        print(f"Tamanho máximo do texto: {sessao['max_texto']}")
+        print(f"Tamanho da janela: {sessao['janela']}")
 
     except ConnectionRefusedError:
         print("Não foi possível conectar ao servidor.")
     except (ConnectionError, ValueError) as erro:
         print(f"Falha no handshake: {erro}")
     finally:
+        if leitor is not None:
+            leitor.close()
         cliente.close()
 
 
