@@ -1,12 +1,42 @@
 import socket
 import json
 import secrets
+import time
+import zlib
+import os
 
 HOST = "127.0.0.1"
 PORT = 2000
 LIMITE_SEQ = 1 << 32
 MODOS = ["individual", "lote"]
 PROTOCOLOS = ["GBN", "SR"]
+NOMES_MODO = {"individual": "isolado", "lote": "em lote"}
+TIMEOUT = 1.0
+TENTATIVAS_FIN = 5
+
+AZUL = "\033[94m"
+VERMELHO = "\033[91m"
+VERDE = "\033[92m"
+RESET = "\033[0m"
+
+
+def colorir(texto, cor):
+    return f"{cor}{texto}{RESET}"
+
+
+class LeitorMensagens:
+    def __init__(self, socket_conexao):
+        self.socket = socket_conexao
+        self.buffer = b""
+
+    def ler_linha(self):
+        while b"\n" not in self.buffer:
+            dados = self.socket.recv(4096)
+            if not dados:
+                raise ConnectionError("Conexão encerrada pelo servidor")
+            self.buffer += dados
+        linha, _, self.buffer = self.buffer.partition(b"\n")
+        return linha.decode("utf-8")
 
 
 def eh_inteiro(valor):
@@ -23,11 +53,7 @@ def enviar_msg(socket_conexao, mensagem):
 
 
 def receber_msg(leitor):
-    linha = leitor.readline()
-    if not linha:
-        raise ConnectionError("Conexão encerrada pelo servidor")
-
-    mensagem = json.loads(linha)
+    mensagem = json.loads(leitor.ler_linha())
     if not isinstance(mensagem, dict):
         raise ValueError("Mensagem recebida não é um objeto JSON")
     return mensagem
@@ -117,7 +143,168 @@ def realizar_handshake(cliente, leitor, modo, protocolo, max_texto):
     }
 
 
+def calcular_checksum(payload):
+    return zlib.crc32(payload.encode("utf-8"))
+
+
+def montar_pacotes(mensagem, tamanho, seq_inicial):
+    pacotes = []
+    for indice, inicio in enumerate(range(0, len(mensagem), tamanho)):
+        payload = mensagem[inicio:inicio + tamanho]
+        pacotes.append({
+            "tipo": "DATA",
+            "seq": (seq_inicial + indice) % LIMITE_SEQ,
+            "payload": payload,
+            "checksum": calcular_checksum(payload),
+        })
+    return pacotes
+
+
+def pedir_mensagem(max_texto):
+    while True:
+        mensagem = input("[CLIENTE] Digite a mensagem: ")
+        if not mensagem:
+            print("A mensagem não pode ser vazia.")
+        elif len(mensagem) > max_texto:
+            print(f"A mensagem tem {len(mensagem)} caracteres; o máximo é {max_texto}.")
+        else:
+            return mensagem
+
+
+def pedir_tamanho_pacote(max_texto):
+    while True:
+        tamanho = escolher_inteiro("[CLIENTE] Tamanho dos lotes (qtd de caracteres)")
+        if 1 <= tamanho <= max_texto:
+            return tamanho
+        print(f"O tamanho deve estar entre 1 e {max_texto}.")
+
+
+def enviar_pacote(cliente, pacote):
+    enviar_msg(cliente, pacote)
+    print(colorir(f'[CLIENTE] Enviando pacote seq={pacote["seq"]} payload="{pacote["payload"]}"', AZUL))
+
+
+def indice_do_ack(mensagem, seq_inicial, enviados):
+    if mensagem.get("tipo") != "ACK" or not eh_inteiro(mensagem.get("ack")):
+        return None
+    indice = (mensagem["ack"] - seq_inicial) % LIMITE_SEQ
+    return indice if indice < enviados else None
+
+
+def tempo_ms(inicio):
+    return round((time.monotonic() - inicio) * 1000)
+
+
+def tratar_timeout(cliente, pacotes, protocolo, base, proximo, prazos):
+    agora = time.monotonic()
+
+    if protocolo == "GBN":
+        print(colorir(f"[WARNING] Pacote {pacotes[base]['seq']} excedeu o tempo de envio. Reenviando...", VERMELHO))
+        for indice in range(base, proximo):
+            enviar_pacote(cliente, pacotes[indice])
+            prazos[indice] = time.monotonic() + TIMEOUT
+        return
+
+    for indice in sorted(prazos):
+        if prazos[indice] <= agora:
+            print(colorir(f"[WARNING] Pacote {pacotes[indice]['seq']} excedeu o tempo de envio. Reenviando...", VERMELHO))
+            enviar_pacote(cliente, pacotes[indice])
+            prazos[indice] = time.monotonic() + TIMEOUT
+
+
+def enviar_dados(cliente, leitor, sessao):
+    modo = sessao["modo"]
+    protocolo = sessao["protocolo"]
+    seq_inicial = sessao["seq_inicial"]
+
+    print()
+    mensagem = pedir_mensagem(sessao["max_texto"])
+    print(f"[CLIENTE] Modo: {NOMES_MODO[modo]}")
+    tamanho = pedir_tamanho_pacote(sessao["max_texto"])
+    print()
+
+    pacotes = montar_pacotes(mensagem, tamanho, seq_inicial)
+    total = len(pacotes)
+    janela = sessao["janela"] if modo == "lote" else 1
+
+    base = 0
+    proximo = 0
+    confirmados = [False] * total
+    prazos = {}
+    inicio_envio = {}
+    inicio_total = time.monotonic()
+
+    while base < total:
+        while proximo < total and proximo < base + janela:
+            enviar_pacote(cliente, pacotes[proximo])
+            inicio_envio[proximo] = time.monotonic()
+            prazos[proximo] = inicio_envio[proximo] + TIMEOUT
+            proximo += 1
+
+        prazo = prazos[base] if protocolo == "GBN" else min(prazos.values())
+        cliente.settimeout(max(0.001, prazo - time.monotonic()))
+        try:
+            resposta = receber_msg(leitor)
+        except socket.timeout:
+            tratar_timeout(cliente, pacotes, protocolo, base, proximo, prazos)
+            continue
+        finally:
+            cliente.settimeout(None)
+
+        indice = indice_do_ack(resposta, seq_inicial, proximo)
+        if indice is None:
+            continue
+
+        if protocolo == "GBN":
+            if indice < base:
+                continue
+            for confirmado in range(base, indice + 1):
+                confirmados[confirmado] = True
+                prazos.pop(confirmado, None)
+                if modo == "individual":
+                    print(colorir(f"[SUCCESS] Pacote enviado corretamente (ACK) time={tempo_ms(inicio_envio[confirmado])}ms", VERDE))
+            base = indice + 1
+        else:
+            if confirmados[indice]:
+                continue
+            confirmados[indice] = True
+            prazos.pop(indice, None)
+            if modo == "individual":
+                print(colorir(f"[SUCCESS] Pacote enviado corretamente (ACK) time={tempo_ms(inicio_envio[indice])}ms", VERDE))
+            while base < total and confirmados[base]:
+                base += 1
+
+    if modo == "lote":
+        print(colorir(f"[SUCCESS] Lote enviado corretamente (ACK) time={tempo_ms(inicio_total)}ms", VERDE))
+
+    return (seq_inicial + total) % LIMITE_SEQ
+
+
+def encerrar_conexao(cliente, leitor, seq_fin):
+    fin = {"tipo": "FIN", "seq": seq_fin}
+    print()
+
+    for _ in range(TENTATIVAS_FIN):
+        enviar_msg(cliente, fin)
+        print(f"[CLIENTE] FIN enviado (seq={seq_fin})")
+        cliente.settimeout(TIMEOUT)
+        try:
+            while True:
+                resposta = receber_msg(leitor)
+                if resposta.get("tipo") == "FIN_ACK" and resposta.get("ack") == proximo_seq(seq_fin):
+                    print("[CLIENTE] FIN-ACK recebido; conexão encerrada.")
+                    return
+        except socket.timeout:
+            print(colorir("[WARNING] FIN sem resposta. Reenviando...", VERMELHO))
+        finally:
+            cliente.settimeout(None)
+
+    print("[CLIENTE] O servidor não confirmou o encerramento.")
+
+
 def main():
+    os.system("")  # habilita cores no terminal do Windows
+
     print("Configuração da conexão")
     modo = escolher_opcao("Modo de operação", MODOS)
     protocolo = escolher_opcao("Protocolo", PROTOCOLOS)
@@ -125,12 +312,12 @@ def main():
     print()
 
     cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    leitor = None
 
     try:
         cliente.connect((HOST, PORT))
+        cliente.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         print(f"Conectado ao servidor {HOST}:{PORT}")
-        leitor = cliente.makefile("r", encoding="utf-8")
+        leitor = LeitorMensagens(cliente)
 
         sessao = realizar_handshake(cliente, leitor, modo, protocolo, max_texto)
         if sessao is None:
@@ -141,13 +328,14 @@ def main():
         print(f"Tamanho máximo do texto: {sessao['max_texto']}")
         print(f"Tamanho da janela: {sessao['janela']}")
 
+        seq_fin = enviar_dados(cliente, leitor, sessao)
+        encerrar_conexao(cliente, leitor, seq_fin)
+
     except ConnectionRefusedError:
         print("Não foi possível conectar ao servidor.")
     except (ConnectionError, ValueError) as erro:
-        print(f"Falha no handshake: {erro}")
+        print(f"Falha na comunicação: {erro}")
     finally:
-        if leitor is not None:
-            leitor.close()
         cliente.close()
 
 
