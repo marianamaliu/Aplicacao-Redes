@@ -47,9 +47,10 @@ Antes de conectar, o cliente pergunta:
 - **Protocolo:** `GBN` (Go-Back-N) ou `SR` (Repetição Seletiva)
 - **Tamanho máximo do texto:** em caracteres
 
-Depois do handshake, o cliente pede a mensagem (que não pode passar de
-`max_texto`) e o tamanho de cada pacote, em caracteres. Ao terminar o envio,
-volta a pedir uma nova mensagem; digitar `sair` encerra a conexão.
+Esses parâmetros valem para os dois sentidos da comunicação. Depois do
+handshake, cliente e servidor funcionam como um chat: qualquer um dos dois pode
+digitar uma mensagem (que não pode passar de `max_texto`) e, em seguida, o
+tamanho de cada pacote, em caracteres. Digitar `sair` encerra a conexão.
 
 ## Formato dos segmentos de dados
 
@@ -57,10 +58,10 @@ Todos os segmentos são objetos JSON terminados em `\n`.
 
 | Segmento | Sentido | Campos |
 |---|---|---|
-| `DATA` | cliente → servidor | `seq`, `payload` (trecho do texto), `checksum`, `fim` |
-| `ACK` | servidor → cliente | `ack` (número de sequência confirmado) |
-| `FIN` | cliente → servidor | `seq` (próximo número após o último pacote) |
-| `FIN_ACK` | servidor → cliente | `ack = seq do FIN + 1` |
+| `DATA` | remetente → destinatário | `seq`, `payload` (trecho do texto), `checksum`, `fim` |
+| `ACK` | destinatário → remetente | `ack` (número de sequência confirmado) |
+| `FIN` | quem encerra → o outro lado | `seq` (próximo número após o último pacote enviado) |
+| `FIN_ACK` | o outro lado → quem encerra | `ack = seq do FIN + 1` |
 
 Exemplo de pacote de dados:
 
@@ -69,72 +70,105 @@ Exemplo de pacote de dados:
 ```
 
 O campo `fim` é `true` apenas no último pacote de cada mensagem. É ele que
-indica ao servidor onde uma mensagem termina e a próxima começa.
+indica ao destinatário onde uma mensagem termina e a próxima começa.
+
+Como os dois lados enviam e recebem, um `ACK` recebido sempre se refere a um
+pacote `DATA` que o próprio lado enviou.
 
 ### Números de sequência
 
-O primeiro pacote de dados usa `seq = client_isn + 1`, o mesmo valor do ACK
-final do handshake (como no TCP, o ACK puro não consome número de sequência).
+Cada sentido da comunicação tem a sua própria numeração, como no TCP:
+
+- **Cliente → servidor:** começa em `client_isn + 1`, o mesmo valor do ACK final
+  do handshake (o ACK puro não consome número de sequência).
+- **Servidor → cliente:** começa em `server_isn + 1`.
+
 Cada pacote seguinte incrementa o `seq` em 1, de forma circular. A numeração
 continua entre as mensagens da mesma conexão: se a primeira mensagem terminou no
 `seq` 10, a segunda começa no 11.
 
 ### Checksum
 
-O checksum é o CRC32 do `payload` codificado em UTF-8 (`zlib.crc32`). O cliente
-calcula e envia junto com o pacote; o servidor recalcula e compara. Se os valores
-forem diferentes, o pacote é considerado corrompido e descartado sem ACK (no GBN,
-o servidor reenvia o ACK do último pacote recebido em ordem).
+O checksum é o CRC32 do `payload` codificado em UTF-8 (`zlib.crc32`). O
+remetente calcula e envia junto com o pacote; o destinatário recalcula e compara.
+Se os valores forem diferentes, o pacote é considerado corrompido e descartado
+sem ACK (no GBN, o destinatário reenvia o ACK do último pacote recebido em ordem).
 
 ## Modos de operação
 
-- **Individual (isolado):** o cliente envia um pacote e só envia o próximo
+O modo e o protocolo escolhidos no handshake valem para quem estiver enviando,
+seja o cliente ou o servidor.
+
+- **Individual (isolado):** o remetente envia um pacote e só envia o próximo
   depois de receber o ACK dele (janela efetiva = 1). Cada confirmação é
   registrada com o tempo de ida e volta.
-- **Lote:** o cliente envia até `janela` pacotes seguidos sem esperar
-  confirmação. Quando todos os pacotes da mensagem são confirmados, registra o
-  tempo total do lote.
+- **Lote:** a mensagem é dividida em lotes de até `janela` pacotes (5). O
+  remetente envia todos os pacotes de um lote sem esperar confirmação e só envia
+  o lote seguinte depois que **todos** os pacotes do lote atual forem
+  confirmados. Ao fim de cada lote, registra `[SUCCESS] Lote enviado
+  corretamente (ACK)` com o tempo daquele lote. Uma mensagem de 16 pacotes, por
+  exemplo, é enviada em 4 lotes (5 + 5 + 5 + 1).
 
 ## Protocolos de retransmissão
 
 ### Go-Back-N (GBN)
 
-- **Cliente:** mantém um único temporizador, referente ao pacote mais antigo
+- **Remetente:** mantém um único temporizador, referente ao pacote mais antigo
   ainda sem confirmação (`base`). Se ele expirar, reenvia esse pacote e todos os
   que foram enviados depois dele.
-- **Servidor:** só aceita o pacote com o próximo `seq` esperado. Pacotes fora de
-  ordem são descartados. O ACK é cumulativo: o servidor sempre responde com o
-  `seq` do último pacote recebido em ordem, confirmando todos os anteriores.
+- **Destinatário:** só aceita o pacote com o próximo `seq` esperado. Pacotes fora
+  de ordem são descartados. O ACK é cumulativo: o destinatário sempre responde
+  com o `seq` do último pacote recebido em ordem, confirmando todos os anteriores.
 
 ### Repetição Seletiva (SR)
 
-- **Cliente:** mantém um temporizador por pacote. Quando um expira, reenvia
-  apenas aquele pacote. A janela avança quando o pacote da `base` é confirmado.
-- **Servidor:** aceita pacotes fora de ordem que estejam dentro da janela,
+- **Remetente:** mantém um temporizador por pacote. Quando um expira, reenvia
+  apenas aquele pacote.
+- **Destinatário:** aceita pacotes fora de ordem que estejam dentro da janela,
   guarda-os em um buffer e confirma cada um individualmente. Os trechos são
   entregues em ordem assim que as lacunas são preenchidas. Pacotes repetidos
   (já entregues) são confirmados de novo, para o caso de o ACK anterior ter se
   perdido.
 
+Em ambos os protocolos, as retransmissões acontecem dentro do lote atual: o
+próximo lote só começa quando todos os pacotes do lote atual forem confirmados.
+
 O tempo limite (`TIMEOUT`) é de 1 segundo.
 
-## Várias mensagens na mesma conexão
+## Chat: os dois lados enviam a qualquer momento
 
-Depois do handshake, o cliente pode enviar quantas mensagens quiser sem abrir uma
-nova conexão. Para cada mensagem, o servidor junta os trechos em ordem e, ao
-entregar o pacote marcado com `fim: true`, imprime a mensagem completa e passa a
-montar a próxima.
+Depois do handshake, cliente e servidor podem enviar quantas mensagens quiserem,
+a qualquer momento e ao mesmo tempo, sem abrir uma nova conexão. Para isso, cada
+lado usa linhas de execução (threads) separadas:
+
+- **Thread principal:** recebe o que foi digitado e envia as mensagens,
+  controlando a janela, os temporizadores e as retransmissões.
+- **Thread de recebimento:** lê continuamente o socket. Pacotes `DATA` são
+  conferidos, confirmados com `ACK` e montados; ao entregar o pacote marcado com
+  `fim: true`, a mensagem completa é exibida. `ACK` e `FIN_ACK` recebidos são
+  repassados à thread principal por filas.
+- **Thread do teclado:** lê o que o usuário digita e coloca em uma fila, para
+  que o programa possa reagir ao fim da conexão mesmo enquanto espera a próxima
+  mensagem.
+
+Uma trava garante que as threads não escrevam no socket ao mesmo tempo, o que
+misturaria os bytes de duas mensagens JSON.
+
+O código comum aos dois lados (formato dos pacotes, checksum, envio com GBN/SR,
+recebimento e encerramento) fica no arquivo `protocolo.py`, usado pelo
+`cliente.py` e pelo `servidor.py`. O handshake continua em cada um dos arquivos,
+porque é diferente para cada lado.
 
 ## Encerramento
 
-Quando o usuário digita `sair`, o cliente envia `FIN` com o `seq` seguinte ao
-último pacote enviado. O servidor confere se recebeu tudo até ali, responde com
-`FIN_ACK` e fecha a conexão. Se o `FIN_ACK` não chegar dentro do tempo limite, o
-cliente reenvia o `FIN` (até 5 tentativas).
+Qualquer um dos lados pode encerrar a conexão digitando `sair`. Quem encerra
+envia `FIN` com o `seq` seguinte ao último pacote que enviou. O outro lado confere
+se recebeu tudo até ali, responde com `FIN_ACK` e fecha a conexão. Se o `FIN_ACK`
+não chegar dentro do tempo limite, o `FIN` é reenviado (até 5 tentativas).
 
-O servidor continua rodando depois que um cliente se desconecta e volta a
-aguardar novas conexões, atendendo um cliente por vez. Ele é encerrado com
-Ctrl+C.
+Quando o servidor encerra a conexão, o programa do cliente termina. Quando o
+cliente encerra, o servidor continua rodando e volta a aguardar novas conexões,
+atendendo um cliente por vez. O servidor é encerrado com Ctrl+C.
 
 ## Escopo deste checkpoint
 

@@ -2,60 +2,19 @@
 import socket
 import json
 import secrets
-import zlib
+import queue
 import os
+import sys
+
+from protocolo import (
+    LIMITE_SEQ, MODOS, PROTOCOLOS, FIM_TECLADO, LeitorMensagens, Conexao,
+    eh_inteiro, proximo_seq, enviar_msg, receber_msg, iniciar_teclado, conversar,
+)
 
 HOST = "0.0.0.0"  # todas as interfaces (nao so localhost)
 PORT = 2000
 JANELA_INICIAL = 5
 TAMAN_MIN_TEXTO = 30 #texto
-LIMITE_SEQ = 1 << 32
-MODOS = ["individual", "lote"]
-PROTOCOLOS = ["GBN", "SR"]
-
-AMARELO = "\033[93m"
-VERMELHO = "\033[91m"
-VERDE = "\033[92m"
-RESET = "\033[0m"
-
-
-def colorir(texto, cor):
-    return f"{cor}{texto}{RESET}"
-
-
-class LeitorMensagens:
-    def __init__(self, socket_conexao):
-        self.socket = socket_conexao
-        self.buffer = b""
-
-    def ler_linha(self):
-        while b"\n" not in self.buffer:
-            dados = self.socket.recv(4096)
-            if not dados:
-                raise ConnectionError("Conexão encerrada antes do esperado")
-            self.buffer += dados
-        linha, _, self.buffer = self.buffer.partition(b"\n")
-        return linha.decode("utf-8")
-
-
-def eh_inteiro(valor):
-    return type(valor) is int
-
-
-def proximo_seq(numero):
-    return (numero + 1) % LIMITE_SEQ
-
-
-def enviar_msg(socket_conexao, mensagem):
-    linha = json.dumps(mensagem, ensure_ascii=False) + "\n"  # transforma no formato json
-    socket_conexao.sendall(linha.encode("utf-8"))  # converte a string em bytes
-
-
-def receber_msg(leitor):
-    mensagem = json.loads(leitor.ler_linha())
-    if not isinstance(mensagem, dict):
-        raise ValueError("Mensagem recebida não é um objeto JSON")
-    return mensagem
 
 
 def validar_syn(mensagem):
@@ -145,8 +104,8 @@ def realizar_handshake(conexao, leitor):
     print("Handshake de três vias concluído; aguardando a próxima etapa, sem troca de dados.")
 
     return {
-        "seq_esperado": proximo_seq(client_isn),
-        "seq_servidor": proximo_seq(server_isn),
+        "seq_envio": proximo_seq(server_isn),
+        "seq_recebimento": proximo_seq(client_isn),
         "modo": syn["modo"],
         "protocolo": syn["protocolo"],
         "max_texto": syn["max_texto"],
@@ -154,103 +113,23 @@ def realizar_handshake(conexao, leitor):
     }
 
 
-def calcular_checksum(payload):
-    return zlib.crc32(payload.encode("utf-8"))
-
-
-def pacote_valido(mensagem):
-    return (
-        eh_inteiro(mensagem.get("seq"))
-        and isinstance(mensagem.get("payload"), str)
-        and eh_inteiro(mensagem.get("checksum"))
-        and isinstance(mensagem.get("fim"), bool)
-    )
-
-
-def enviar_ack(conexao, seq):
-    enviar_msg(conexao, {"tipo": "ACK", "ack": seq})
-
-
-def receber_dados(conexao, leitor, sessao):
-    seq_base = sessao["seq_esperado"]
-    protocolo = sessao["protocolo"]
-    modo = sessao["modo"]
-    janela = sessao["janela"] if modo == "lote" else 1
-
-    esperado = 0
-    partes = []
-    fora_de_ordem = {}
-    print()
-
-    def entregar(payload, ultimo):
-        partes.append(payload)
-        if ultimo:
-            mensagem_completa = "".join(partes)
-            partes.clear()
-            print(colorir(f'[SERVIDOR] Mensagem completa: "{mensagem_completa}"', VERDE))
-            print()
-
+def aguardar_cliente(servidor, teclado):
     while True:
-        mensagem = receber_msg(leitor)
-        tipo = mensagem.get("tipo")
+        try:
+            return servidor.accept()
+        except socket.timeout:
+            pass
 
-        if tipo == "FIN":
-            seq_fin = (seq_base + esperado) % LIMITE_SEQ
-            if mensagem.get("seq") != seq_fin:
-                print(colorir(f"[WARNING] FIN com seq inesperado ({mensagem.get('seq')}). Ignorado.", VERMELHO))
-                continue
-            enviar_msg(conexao, {"tipo": "FIN_ACK", "ack": proximo_seq(seq_fin)})
-            if partes:
-                print(colorir("[WARNING] Conexão encerrada com uma mensagem incompleta.", VERMELHO))
-            print("[SERVIDOR] FIN recebido e confirmado; conexão encerrada.")
-            return
-
-        if tipo != "DATA" or not pacote_valido(mensagem):
-            print(colorir("[WARNING] Mensagem fora do formato esperado. Ignorada.", VERMELHO))
-            continue
-
-        seq = mensagem["seq"]
-        payload = mensagem["payload"]
-        indice = (seq - seq_base) % LIMITE_SEQ
-        checksum = calcular_checksum(payload)
-
-        if checksum != mensagem["checksum"]:
-            print(colorir(
-                f"[WARNING] Pacote seq={seq} corrompido "
-                f"(checksum recebido=0x{mensagem['checksum']:08X}, calculado=0x{checksum:08X}). Descartado.",
-                VERMELHO,
-            ))
-            if protocolo == "GBN" and esperado > 0:
-                enviar_ack(conexao, (seq_base + esperado - 1) % LIMITE_SEQ)
-            continue
-
-        if modo == "lote":
-            print(colorir(f'[SERVIDOR] Pacote recebido: seq={seq} checksum=0x{checksum:08X} payload="{payload}"', AMARELO))
-        else:
-            print(colorir(f"[SERVIDOR] Pacote recebido: seq={seq} checksum=0x{checksum:08X}", AMARELO))
-
-        if protocolo == "GBN":
-            if indice == esperado:
-                esperado += 1
-                enviar_ack(conexao, seq)
-                entregar(payload, mensagem["fim"])
-            else:
-                print(colorir(f"[WARNING] Pacote seq={seq} fora de ordem. Descartado.", VERMELHO))
-                if esperado > 0:
-                    enviar_ack(conexao, (seq_base + esperado - 1) % LIMITE_SEQ)
-        else:
-            if esperado <= indice < esperado + janela:
-                fora_de_ordem[indice] = (payload, mensagem["fim"])
-                enviar_ack(conexao, seq)
-                while esperado in fora_de_ordem:
-                    trecho, ultimo = fora_de_ordem.pop(esperado)
-                    esperado += 1
-                    entregar(trecho, ultimo)
-            elif indice < esperado:
-                enviar_ack(conexao, seq)
+        while True:
+            try:
+                linha = teclado.get_nowait()
+            except queue.Empty:
+                break
+            if linha is not FIM_TECLADO and linha.strip():
+                print("Nenhum cliente conectado; a mensagem não foi enviada.")
 
 
-def atender_cliente(conexao, endereco):
+def atender_cliente(conexao, endereco, teclado):
     conexao.settimeout(None)
     conexao.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     print(f"Cliente conectado: {endereco}")
@@ -258,12 +137,16 @@ def atender_cliente(conexao, endereco):
 
     try:
         sessao = realizar_handshake(conexao, leitor)
-        if sessao is not None:
-            receber_dados(conexao, leitor, sessao)
     except (ConnectionError, ValueError) as erro:
-        print(f"Falha na comunicação: {erro}")
-    finally:
+        print(f"Falha no handshake: {erro}")
         conexao.close()
+        return
+
+    if sessao is None:
+        conexao.close()
+        return
+
+    conversar(Conexao(conexao, leitor, "SERVIDOR", sessao), teclado, sair_no_fim_do_teclado=False)
 
 
 def main():
@@ -275,16 +158,13 @@ def main():
     servidor.listen(1)
     servidor.settimeout(1.0)  # permite fechar com Ctrl+C no Windows
 
+    teclado = iniciar_teclado()
+
     try:
         while True:
             print(f"server aguardando conexão em {HOST}:{PORT} (Ctrl+C para encerrar)\n")
-            while True:
-                try:
-                    conexao, endereco = servidor.accept()
-                    break
-                except socket.timeout:
-                    continue
-            atender_cliente(conexao, endereco)
+            conexao, endereco = aguardar_cliente(servidor, teclado)
+            atender_cliente(conexao, endereco, teclado)
             print()
     except KeyboardInterrupt:
         print("\nServidor encerrado.")
@@ -294,3 +174,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    sys.stdout.flush()
+    os._exit(0)
