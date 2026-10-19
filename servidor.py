@@ -163,6 +163,7 @@ def pacote_valido(mensagem):
         eh_inteiro(mensagem.get("seq"))
         and isinstance(mensagem.get("payload"), str)
         and eh_inteiro(mensagem.get("checksum"))
+        and isinstance(mensagem.get("fim"), bool)
     )
 
 
@@ -181,6 +182,14 @@ def receber_dados(conexao, leitor, sessao):
     fora_de_ordem = {}
     print()
 
+    def entregar(payload, ultimo):
+        partes.append(payload)
+        if ultimo:
+            mensagem_completa = "".join(partes)
+            partes.clear()
+            print(colorir(f'[SERVIDOR] Mensagem completa: "{mensagem_completa}"', VERDE))
+            print()
+
     while True:
         mensagem = receber_msg(leitor)
         tipo = mensagem.get("tipo")
@@ -191,10 +200,10 @@ def receber_dados(conexao, leitor, sessao):
                 print(colorir(f"[WARNING] FIN com seq inesperado ({mensagem.get('seq')}). Ignorado.", VERMELHO))
                 continue
             enviar_msg(conexao, {"tipo": "FIN_ACK", "ack": proximo_seq(seq_fin)})
-            mensagem_completa = "".join(partes)
-            print(colorir(f'[SERVIDOR] Mensagem completa: "{mensagem_completa}"', VERDE))
+            if partes:
+                print(colorir("[WARNING] Conexão encerrada com uma mensagem incompleta.", VERMELHO))
             print("[SERVIDOR] FIN recebido e confirmado; conexão encerrada.")
-            return mensagem_completa
+            return
 
         if tipo != "DATA" or not pacote_valido(mensagem):
             print(colorir("[WARNING] Mensagem fora do formato esperado. Ignorada.", VERMELHO))
@@ -222,21 +231,39 @@ def receber_dados(conexao, leitor, sessao):
 
         if protocolo == "GBN":
             if indice == esperado:
-                partes.append(payload)
                 esperado += 1
+                enviar_ack(conexao, seq)
+                entregar(payload, mensagem["fim"])
             else:
                 print(colorir(f"[WARNING] Pacote seq={seq} fora de ordem. Descartado.", VERMELHO))
-            if esperado > 0:
-                enviar_ack(conexao, (seq_base + esperado - 1) % LIMITE_SEQ)
+                if esperado > 0:
+                    enviar_ack(conexao, (seq_base + esperado - 1) % LIMITE_SEQ)
         else:
             if esperado <= indice < esperado + janela:
-                fora_de_ordem[indice] = payload
+                fora_de_ordem[indice] = (payload, mensagem["fim"])
                 enviar_ack(conexao, seq)
                 while esperado in fora_de_ordem:
-                    partes.append(fora_de_ordem.pop(esperado))
+                    trecho, ultimo = fora_de_ordem.pop(esperado)
                     esperado += 1
+                    entregar(trecho, ultimo)
             elif indice < esperado:
                 enviar_ack(conexao, seq)
+
+
+def atender_cliente(conexao, endereco):
+    conexao.settimeout(None)
+    conexao.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    print(f"Cliente conectado: {endereco}")
+    leitor = LeitorMensagens(conexao)
+
+    try:
+        sessao = realizar_handshake(conexao, leitor)
+        if sessao is not None:
+            receber_dados(conexao, leitor, sessao)
+    except (ConnectionError, ValueError) as erro:
+        print(f"Falha na comunicação: {erro}")
+    finally:
+        conexao.close()
 
 
 def main():
@@ -246,23 +273,21 @@ def main():
     servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     servidor.bind((HOST, PORT))
     servidor.listen(1)
-
-    print(f"server aguardando conexão em {HOST}:{PORT}\n")
+    servidor.settimeout(1.0)  # permite fechar com Ctrl+C no Windows
 
     try:
-        conexao, endereco = servidor.accept()
-        conexao.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        print(f"Cliente conectado: {endereco}")
-        leitor = LeitorMensagens(conexao)
-
-        try:
-            sessao = realizar_handshake(conexao, leitor)
-            if sessao is not None:
-                receber_dados(conexao, leitor, sessao)
-        except (ConnectionError, ValueError) as erro:
-            print(f"Falha na comunicação: {erro}")
-        finally:
-            conexao.close()
+        while True:
+            print(f"server aguardando conexão em {HOST}:{PORT} (Ctrl+C para encerrar)\n")
+            while True:
+                try:
+                    conexao, endereco = servidor.accept()
+                    break
+                except socket.timeout:
+                    continue
+            atender_cliente(conexao, endereco)
+            print()
+    except KeyboardInterrupt:
+        print("\nServidor encerrado.")
     finally:
         servidor.close()
 

@@ -149,20 +149,22 @@ def calcular_checksum(payload):
 
 def montar_pacotes(mensagem, tamanho, seq_inicial):
     pacotes = []
-    for indice, inicio in enumerate(range(0, len(mensagem), tamanho)):
+    inicios = range(0, len(mensagem), tamanho)
+    for indice, inicio in enumerate(inicios):
         payload = mensagem[inicio:inicio + tamanho]
         pacotes.append({
             "tipo": "DATA",
             "seq": (seq_inicial + indice) % LIMITE_SEQ,
             "payload": payload,
             "checksum": calcular_checksum(payload),
+            "fim": indice == len(inicios) - 1,
         })
     return pacotes
 
 
 def pedir_mensagem(max_texto):
     while True:
-        mensagem = input("[CLIENTE] Digite a mensagem: ")
+        mensagem = input("[CLIENTE] Digite a mensagem (ou 'sair' para encerrar): ")
         if not mensagem:
             print("A mensagem não pode ser vazia.")
         elif len(mensagem) > max_texto:
@@ -212,16 +214,9 @@ def tratar_timeout(cliente, pacotes, protocolo, base, proximo, prazos):
             prazos[indice] = time.monotonic() + TIMEOUT
 
 
-def enviar_dados(cliente, leitor, sessao):
+def enviar_mensagem(cliente, leitor, sessao, seq_inicial, mensagem, tamanho):
     modo = sessao["modo"]
     protocolo = sessao["protocolo"]
-    seq_inicial = sessao["seq_inicial"]
-
-    print()
-    mensagem = pedir_mensagem(sessao["max_texto"])
-    print(f"[CLIENTE] Modo: {NOMES_MODO[modo]}")
-    tamanho = pedir_tamanho_pacote(sessao["max_texto"])
-    print()
 
     pacotes = montar_pacotes(mensagem, tamanho, seq_inicial)
     total = len(pacotes)
@@ -280,6 +275,22 @@ def enviar_dados(cliente, leitor, sessao):
     return (seq_inicial + total) % LIMITE_SEQ
 
 
+def conversar(cliente, leitor, sessao):
+    seq_atual = sessao["seq_inicial"]
+
+    while True:
+        print()
+        mensagem = pedir_mensagem(sessao["max_texto"])
+        if mensagem.strip().lower() == "sair":
+            return seq_atual
+
+        print(f"[CLIENTE] Modo: {NOMES_MODO[sessao['modo']]}")
+        tamanho = pedir_tamanho_pacote(sessao["max_texto"])
+        print()
+
+        seq_atual = enviar_mensagem(cliente, leitor, sessao, seq_atual, mensagem, tamanho)
+
+
 def encerrar_conexao(cliente, leitor, seq_fin):
     fin = {"tipo": "FIN", "seq": seq_fin}
     print()
@@ -328,7 +339,7 @@ def main():
         print(f"Tamanho máximo do texto: {sessao['max_texto']}")
         print(f"Tamanho da janela: {sessao['janela']}")
 
-        seq_fin = enviar_dados(cliente, leitor, sessao)
+        seq_fin = conversar(cliente, leitor, sessao)
         encerrar_conexao(cliente, leitor, seq_fin)
 
     except ConnectionRefusedError:
