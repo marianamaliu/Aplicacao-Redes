@@ -79,7 +79,7 @@ cada pacote:
 ```text
 olá mundo, tudo bem?
 [CLIENTE] Modo: em lote
-[CLIENTE] Tamanho dos lotes (qtd de caracteres):
+[CLIENTE] Tamanho de cada pacote (1 a 4 caracteres):
 4
 ```
 
@@ -91,6 +91,11 @@ O lado que enviou mostra os pacotes saindo e a confirmação:
 [CLIENTE] Enviando pacote seq=293991316 payload="o, t"
 [CLIENTE] Enviando pacote seq=293991317 payload="udo "
 [CLIENTE] Enviando pacote seq=293991318 payload="bem?"
+[CLIENTE] ACK recebido: ack=293991314
+[CLIENTE] ACK recebido: ack=293991315
+[CLIENTE] ACK recebido: ack=293991316
+[CLIENTE] ACK recebido: ack=293991317
+[CLIENTE] ACK recebido: ack=293991318
 [SUCCESS] Lote enviado corretamente (ACK) time=1ms
 ```
 
@@ -105,6 +110,11 @@ maior aparece assim:
 [CLIENTE] Enviando pacote seq=1768004231 payload="agem"
 [CLIENTE] Enviando pacote seq=1768004232 payload=" de "
 [CLIENTE] Enviando pacote seq=1768004233 payload="test"
+[CLIENTE] ACK recebido: ack=1768004229
+[CLIENTE] ACK recebido: ack=1768004230
+[CLIENTE] ACK recebido: ack=1768004231
+[CLIENTE] ACK recebido: ack=1768004232
+[CLIENTE] ACK recebido: ack=1768004233
 [SUCCESS] Lote enviado corretamente (ACK) time=1ms
 [CLIENTE] Enviando pacote seq=1768004234 payload="e co"
 [CLIENTE] Enviando pacote seq=1768004235 payload="m be"
@@ -129,6 +139,7 @@ dois podem enviar ao mesmo tempo.
 Os números de sequência são aleatórios e mudam a cada execução.
 
 No modo `individual`, quem envia registra um
+`[CLIENTE] ACK recebido: ack=...` seguido de
 `[SUCCESS] Pacote enviado corretamente (ACK)` para cada pacote, e quem recebe
 exibe os pacotes sem o payload.
 
@@ -156,7 +167,9 @@ aguardar novas conexões.
 
 **Protocolo:** `GBN` (Go-Back-N) ou `SR` (Repetição Seletiva)
 
-**Tamanho máximo do texto:** mínimo de 30 caracteres
+**Tamanho máximo do texto:** limite da mensagem inteira, mínimo de 30 caracteres
+
+**Tamanho de cada pacote:** de 1 a 4 caracteres (limite do payload)
 
 **Janela:** definida pelo servidor (valor inicial: 5)
 
