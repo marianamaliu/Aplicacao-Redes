@@ -272,9 +272,10 @@ class Conexao:
             while True:
                 mensagem = receber_msg(self.leitor)
                 tipo = mensagem.get("tipo")
-
+                
                 if tipo == "ACK":
                     if eh_inteiro(mensagem.get("ack")):
+                        self.log(f"ACK recebido: ack={mensagem['ack']}")
                         self.acks.put(mensagem["ack"])
                 elif tipo == "FIN_ACK":
                     self.fin_acks.put(mensagem.get("ack"))
