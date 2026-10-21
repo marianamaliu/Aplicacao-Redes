@@ -11,6 +11,7 @@ PROTOCOLOS = ["GBN", "SR"]
 NOMES_MODO = {"individual": "isolado", "lote": "em lote"}
 TIMEOUT = 1.0
 TENTATIVAS_FIN = 5
+TAMANHO_MAX_PAYLOAD = 4
 
 AZUL = "\033[94m"
 VERMELHO = "\033[91m"
@@ -68,12 +69,14 @@ def pacote_valido(mensagem):
     return (
         eh_inteiro(mensagem.get("seq"))
         and isinstance(mensagem.get("payload"), str)
+        and len(mensagem["payload"]) <= TAMANHO_MAX_PAYLOAD
         and eh_inteiro(mensagem.get("checksum"))
         and isinstance(mensagem.get("fim"), bool)
     )
 
 
 def montar_pacotes(mensagem, tamanho, seq_inicial):
+    tamanho = min(tamanho, TAMANHO_MAX_PAYLOAD)
     pacotes = []
     inicios = range(0, len(mensagem), tamanho)
     for indice, inicio in enumerate(inicios):
@@ -375,14 +378,14 @@ def proxima_linha(fila, conexao):
 
 def pedir_tamanho(fila, conexao):
     while True:
-        conexao.log("Tamanho dos lotes (qtd de caracteres):")
+        conexao.log("Tamanho de cada pacote (1 a {TAMANHO_MAX_PAYLOAD} caracteres):")
         linha = proxima_linha(fila, conexao)
         if linha is None or linha is FIM_TECLADO:
             return linha
         linha = linha.strip()
-        if linha.isdigit() and 1 <= int(linha) <= conexao.max_texto:
+        if linha.isdigit() and 1 <= int(linha) <= TAMANHO_MAX_PAYLOAD:
             return int(linha)
-        print(f"O tamanho deve ser um número entre 1 e {conexao.max_texto}.")
+        print(f"O tamanho deve ser um número entre 1 e {TAMANHO_MAX_PAYLOAD}.")
 
 
 def esperar_encerramento(conexao):
