@@ -218,6 +218,35 @@ correção.
 * Testes, incluindo a simulação de perdas para verificar as retransmissões;
 * Atualização do `relatorio2.md` e do `README.md`
 
+### Análise crítica e debugging
+
+Problemas encontrados ao revisar o código contra o enunciado e ao executar
+cliente e servidor nas quatro combinações (individual/lote × GBN/SR). A IA foi
+usada como apoio para revisar, testar e propor correções; cada alteração foi
+aplicada, compreendida e validada pelo grupo.
+
+**1. Payload maior que 4 caracteres.** O tamanho de cada pacote podia ser
+qualquer valor até `max_texto`, confundindo o limite da mensagem inteira com o
+limite do pacote. Com `max_texto = 100`, uma mensagem de 100 caracteres saía em
+um único pacote, contra o enunciado (máximo de 4). Na revisão feita com apoio de
+IA, um teste com tamanho de pacote 30 mostrou o problema. Aplicamos a correção: 
+constante `TAMANHO_MAX_PAYLOAD = 4` em três pontos, `pedir_tamanho`
+(entrada do usuário), `montar_pacotes` (criação do pacote) e `pacote_valido`
+(recepção). Verificação: uma mensagem de 100 caracteres passou a gerar 25
+pacotes de 4.
+
+**2. Leitura do socket.** A primeira leitura de mensagens descartava o que
+chegava junto no mesmo `recv` depois do `\n`. Correção: um buffer por conexão
+(`LeitorMensagens`), que guarda o excedente para a leitura seguinte.
+
+**3. Encerramento após uma mensagem.** A primeira versão da troca de mensagens
+terminava a execução depois de enviar uma. O grupo percebeu nos testes, e a
+correção permitiu várias mensagens na mesma conexão e manteve o servidor ativo
+depois que o cliente sai.
+
+Em todos os casos, a correção foi validada executando cliente e servidor reais
+nas quatro combinações de modo e protocolo, nos dois sentidos de envio.
+
 ### Prompts utilizados
 
 1. Esse é o que temos que fazer no checkpoint 2 e essa foi a mensagem da minha
