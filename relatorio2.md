@@ -177,3 +177,59 @@ caminho sem erros acontece: todos os pacotes chegam em ordem, nenhum checksum
 falha e nenhum temporizador expira. O tratamento de timeout, retransmissão,
 pacotes corrompidos e pacotes fora de ordem já está implementado e definido
 acima, e será exercitado quando a simulação de erros for adicionada.
+
+## Processo de Construção e Uso de IA
+
+Durante o desenvolvimento deste checkpoint, utilizamos inteligência artificial
+como apoio na revisão do código existente, na implementação da troca de
+mensagens e na escrita da documentação.
+
+A IA foi utilizada para revisar o handshake do checkpoint anterior, implementar
+a troca de mensagens seguindo o padrão definido no `padrao_msgs.txt`, corrigir os
+problemas encontrados durante os testes e explicar o funcionamento do código.
+
+Todo o código foi executado e testado por nós em todas as combinações de modo e
+protocolo, e cada problema encontrado nos testes foi levado de volta para
+correção.
+
+### Principais pontos em que a IA foi utilizada
+
+* Revisão do handshake: validação do SYN-ACK no cliente, validação do modo no
+  servidor e escolha dos parâmetros pelo usuário;
+* Identificação do problema na leitura do socket, que descartava mensagens
+  recebidas juntas, e criação da leitura com buffer;
+* Ajudou na Implementação da troca de mensagens: divisão em pacotes, checksum CRC32,
+  janela, Go-Back-N, Repetição Seletiva, timeout e encerramento com FIN;
+* Envio de várias mensagens na mesma conexão e servidor ativo após a saída do
+  cliente;
+* Transformação da comunicação em chat, com threads e o arquivo `protocolo.py`;
+* Testes, incluindo a simulação de perdas para verificar as retransmissões;
+* Atualização do `relatorio2.md` e do `README.md`
+
+### Prompts utilizados
+
+1. Esse é o que temos que fazer no checkpoint 2 e essa foi a mensagem da minha
+   dupla. Verifique o que já foi feito no repositório e me diga o que eu tenho
+   que fazer.
+
+2. Verifique se está tudo certo no handshake e corrija as inconsistências
+   apontadas.
+
+3. Com base em tudo que te passei, isso tudo está dentro da entrega 2?
+
+4. Faça tudo que está faltando para a entrega 2.
+
+5. Deixamos passar um bug: o programa não pode encerrar quando a mensagem é
+   enviada, ele tem que continuar.
+
+6. O servidor também tem que enviar mensagem. Os dois devem poder enviar a
+   qualquer momento, como num chat.
+
+7. No modo lote, cada lote tem que ser verificado antes de enviar outro.
+
+8. Por que o cliente diminuiu tanto de tamanho?
+
+9. Como faço para testar?
+
+10. Preciso entender o código linha por linha para poder explicar na
+    apresentação.
