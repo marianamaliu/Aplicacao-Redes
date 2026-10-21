@@ -13,7 +13,7 @@ Tamanho da janela: 3
 
 [CLIENTE] Digite a mensagem: olá mundo, tudo bem?
 [CLIENTE] Modo: em lote
-[CLIENTE] Tamanho dos lotes (qtd de caracteres): 4
+[CLIENTE] Tamanho de cada pacote (1 a 4 caracteres): 4
 
 [CLIENTE] Enviando pacote seq=0 payload="olá "(AZUL)
 [CLIENTE] Enviando pacote seq=1 payload="mund"
