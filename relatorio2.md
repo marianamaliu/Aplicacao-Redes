@@ -235,11 +235,21 @@ constante `TAMANHO_MAX_PAYLOAD = 4` em três pontos, `pedir_tamanho`
 (recepção). Verificação: uma mensagem de 100 caracteres passou a gerar 25
 pacotes de 4.
 
-**2. Leitura do socket.** A primeira leitura de mensagens descartava o que
+**2. `KeyError` ao exibir o ACK recebido.** Ao adaptar a sugestão de exibir o
+`ACK recebido` no cliente, a linha foi colocada em `_receber` fora do
+`if tipo == "ACK"`. Pacotes `DATA`, `FIN` e `FIN_ACK` não têm o campo `ack`,
+então `mensagem['ack']` gerou `KeyError`. Esse erro não é capturado pelo
+`except (ConnectionError, ValueError, OSError)`, a thread de recepção morreu
+sem aviso, o servidor nunca montou a mensagem e o cliente ficou retransmitindo
+por timeout. O problema foi identificado ao rodar as quatro combinações e ler o
+traceback no servidor. Correção: manter a linha somente dentro do
+`if tipo == "ACK"`.
+
+**3. Leitura do socket.** A primeira leitura de mensagens descartava o que
 chegava junto no mesmo `recv` depois do `\n`. Correção: um buffer por conexão
 (`LeitorMensagens`), que guarda o excedente para a leitura seguinte.
 
-**3. Encerramento após uma mensagem.** A primeira versão da troca de mensagens
+**4. Encerramento após uma mensagem.** A primeira versão da troca de mensagens
 terminava a execução depois de enviar uma. O grupo percebeu nos testes, e a
 correção permitiu várias mensagens na mesma conexão e manteve o servidor ativo
 depois que o cliente sai.
