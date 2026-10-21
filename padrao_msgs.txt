@@ -18,20 +18,25 @@ Tamanho da janela: 3
 [CLIENTE] Enviando pacote seq=0 payload="olá "(AZUL)
 [CLIENTE] Enviando pacote seq=1 payload="mund"
 [CLIENTE] Enviando pacote seq=2 payload="o tu"
-[WARNING] Pacote 1 excedeu o tempo de envio. Reenviando... (VERMELHO) 
-[CLIENTE] Enviando pacote seq=1 payload="mund" 
+[CLIENTE] ACK recebido: ack=0
+[WARNING] Pacote 1 excedeu o tempo de envio. Reenviando... (VERMELHO)
+[CLIENTE] Enviando pacote seq=1 payload="mund"
 [CLIENTE] Enviando pacote seq=2 payload="o tu" OU somente Enviando pacote seq=1 payload="mund" (SR)
-[CLIENTE] Enviando pacote seq=3 payload="do b"
+[CLIENTE] ACK recebido: ack=1
+[CLIENTE] ACK recebido: ack=2
 [SUCCESS] Lote enviado corretamente (ACK) time=3ms (VERDE)
 
-OU 
+OU
 
 [CLIENTE] Digite a mensagem: olá mundo, tudo bem?
 [CLIENTE] Modo: isolado
+[CLIENTE] Tamanho de cada pacote (1 a 4 caracteres): 4
 [CLIENTE] Enviando pacote seq=0 payload="olá "(AZUL)
-[CLIENTE] Lote enviado corretamente (ACK) time=3ms (VERDE)
+[CLIENTE] ACK recebido: ack=0
+[SUCCESS] Pacote enviado corretamente (ACK) time=3ms (VERDE)
 [CLIENTE] Enviando pacote seq=1 payload="mund"
-[SUCCESS] Lote enviado corretamente (ACK) time=3ms (VERDE)
+[CLIENTE] ACK recebido: ack=1
+[SUCCESS] Pacote enviado corretamente (ACK) time=3ms (VERDE)
 
 ####### Server-side: ########
 
