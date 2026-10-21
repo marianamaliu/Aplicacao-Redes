@@ -378,7 +378,7 @@ def proxima_linha(fila, conexao):
 
 def pedir_tamanho(fila, conexao):
     while True:
-        conexao.log("Tamanho de cada pacote (1 a {TAMANHO_MAX_PAYLOAD} caracteres):")
+        conexao.log(f"Tamanho de cada pacote (1 a {TAMANHO_MAX_PAYLOAD} caracteres):")
         linha = proxima_linha(fila, conexao)
         if linha is None or linha is FIM_TECLADO:
             return linha
