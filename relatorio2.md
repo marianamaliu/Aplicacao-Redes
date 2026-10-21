@@ -72,8 +72,20 @@ Exemplo de pacote de dados:
 O campo `fim` é `true` apenas no último pacote de cada mensagem. É ele que
 indica ao destinatário onde uma mensagem termina e a próxima começa.
 
+O campo `payload` tem no **máximo 4 caracteres** (constante `TAMANHO_MAX_PAYLOAD`).
+A mensagem do usuário pode ter até `max_texto` caracteres (mínimo de 30,
+negociado no handshake), mas é sempre fragmentada em pacotes de até 4
+caracteres: uma mensagem de 100 caracteres gera 25 pacotes. O remetente escolhe
+o tamanho de cada pacote entre 1 e 4, e o destinatário trata como fora do
+formato (e ignora) qualquer `DATA` com payload maior que 4.
+
 Como os dois lados enviam e recebem, um `ACK` recebido sempre se refere a um
 pacote `DATA` que o próprio lado enviou.
+
+Cada `ACK` recebido é exibido pelo remetente assim que chega, com o número
+confirmado: `[CLIENTE] ACK recebido: ack=<seq>`. No GBN o ACK é cumulativo (um
+`ack` confirma todos os pacotes até aquele `seq`); no SR cada ACK confirma um
+único pacote.
 
 ### Números de sequência
 
