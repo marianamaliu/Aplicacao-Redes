@@ -281,3 +281,48 @@ nas quatro combinações de modo e protocolo, nos dois sentidos de envio.
 8. Como faço para testar?
 
 9. Verifique se a entrega esta ok para ser submetida sem erros.
+
+
+### Decisões tomadas a partir das respostas da IA
+
+Para cada prompt utilizado, o que decidimos a partir da resposta recebida.
+
+**1. Levantamento do que fazer no checkpoint 2.** A resposta mostrou que o
+handshake e o `padrao_msgs.txt` já estavam prontos e que faltava a troca de
+mensagens. Decidimos concentrar o trabalho nela, aproveitando o que já existia.
+
+**2. Revisão do handshake.** Para corrigir as inconsistências, decidimos usar
+`seq` inicial aleatório (como no TCP), validar o campo `modo` (que muda a forma
+de enviar) e deixar o usuário escolher os parâmetros. Decidimos também commitar o
+handshake revisado antes de seguir e manter o código e os comentários originais,
+retirando os comentários longos sugeridos pela IA.
+
+**3. O que cabe na entrega 2.** Decidimos implementar o protocolo completo
+(checksum CRC32, campo `fim` para marcar o último pacote, janela, GBN, SR,
+timeout e encerramento), mesmo com o canal sem erros, deixando o tratamento de
+falhas pronto para os próximos checkpoints.
+
+**4. Programa encerrando após uma mensagem.** Decidimos que o programa só termina
+quando o usuário digita `sair`. Com isso, o tamanho do pacote passou a ser
+perguntado a cada mensagem, a numeração de `seq` continua entre mensagens e o
+servidor volta a aguardar novos clientes.
+
+**5. Servidor também enviando mensagens.** Entre só o cliente enviar, o servidor
+responder por turnos ou os dois enviarem a qualquer momento, escolhemos a
+terceira opção, como num chat. Para isso, decidimos usar threads, filas e uma
+trava no socket, separar o código comum no `protocolo.py`, definir o formato
+`FIN`/`FIN_ACK` e ativar `TCP_NODELAY`.
+
+**6. Verificação de cada lote.** Decidimos que, no modo lote, cada lote só é
+enviado depois que todos os pacotes do lote anterior forem confirmados.
+
+**7. Redução do tamanho do cliente.** A resposta explicou que o código comum foi
+movido para o `protocolo.py`. Decidimos manter o handshake em cada arquivo, por
+ser diferente para cada lado, e priorizar entender o código linha por linha, em
+vez de um roteiro de apresentação.
+
+**8. Como testar.** Decidimos testar as quatro combinações de modo e protocolo,
+nos dois sentidos de envio, e simular perdas para verificar as retransmissões.
+
+**9. Revisão final da entrega.** Decidimos revisar o código contra o enunciado
+antes de submeter, o que levou às correções descritas na análise crítica abaixo.
