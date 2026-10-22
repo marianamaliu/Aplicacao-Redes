@@ -268,19 +268,16 @@ nas quatro combinações de modo e protocolo, nos dois sentidos de envio.
 
 3. Com base em tudo que te passei, isso tudo está dentro da entrega 2?
 
-4. Faça tudo que está faltando para a entrega 2.
-
-5. Deixamos passar um bug: o programa não pode encerrar quando a mensagem é
+4. Deixamos passar um bug: o programa não pode encerrar quando a mensagem é
    enviada, ele tem que continuar.
 
-6. O servidor também tem que enviar mensagem. Os dois devem poder enviar a
+5. O servidor também tem que enviar mensagem. Os dois devem poder enviar a
    qualquer momento, como num chat.
 
-7. No modo lote, cada lote tem que ser verificado antes de enviar outro.
+6. No modo lote, cada lote tem que ser verificado antes de enviar outro.
 
-8. Por que o cliente diminuiu tanto de tamanho?
+7. Por que o cliente diminuiu tanto de tamanho?
 
-9. Como faço para testar?
+8. Como faço para testar?
 
-10. Preciso entender o código linha por linha para poder explicar na
-    apresentação.
+9. Verifique se a entrega esta ok para ser submetida sem erros.
