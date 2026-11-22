@@ -124,7 +124,7 @@ def main():
         print(f"Tamanho da janela: {sessao['janela']}")
 
         conexao = Conexao(cliente, leitor, "CLIENTE", sessao)
-        conversar(conexao, iniciar_teclado())
+        conversar(conexao, iniciar_teclado(), simular=True)
 
     except ConnectionRefusedError:
         print("Não foi possível conectar ao servidor.")

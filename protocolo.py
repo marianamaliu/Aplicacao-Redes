@@ -37,6 +37,15 @@ def proximo_seq(numero):
 def calcular_checksum(payload):
     return zlib.crc32(payload.encode("utf-8"))
 
+CHAVE = b"AtividadeRedes01" 
+
+def aplicar_xor(dados, deslocamento):
+    resultado = []
+    for i, b in enumerate(dados):
+        byte_chave = CHAVE[(deslocamento + i) % len(CHAVE)]
+        resultado.append(b ^ byte_chave)
+    return bytes(resultado)
+    
 
 class LeitorMensagens:
     def __init__(self, socket_conexao):
@@ -69,7 +78,7 @@ def pacote_valido(mensagem):
     return (
         eh_inteiro(mensagem.get("seq"))
         and isinstance(mensagem.get("payload"), str)
-        and len(mensagem["payload"]) <= TAMANHO_MAX_PAYLOAD
+        and len(mensagem["payload"]) <= TAMANHO_MAX_PAYLOAD * 8
         and eh_inteiro(mensagem.get("checksum"))
         and isinstance(mensagem.get("fim"), bool)
     )
@@ -80,19 +89,25 @@ def montar_pacotes(mensagem, tamanho, seq_inicial):
     pacotes = []
     inicios = range(0, len(mensagem), tamanho)
     for indice, inicio in enumerate(inicios):
-        payload = mensagem[inicio:inicio + tamanho]
+        texto = mensagem[inicio:inicio + tamanho]
+        seq = (seq_inicial + indice) % LIMITE_SEQ
+        cifrado = aplicar_xor(texto.encode("utf-8"), seq).hex()
         pacotes.append({
             "tipo": "DATA",
-            "seq": (seq_inicial + indice) % LIMITE_SEQ,
-            "payload": payload,
-            "checksum": calcular_checksum(payload),
+            "seq": seq,
+            "payload": cifrado,
+            "checksum": calcular_checksum(cifrado),
             "fim": indice == len(inicios) - 1,
-        })
+    })
     return pacotes
 
 
 def tempo_ms(inicio):
     return round((time.monotonic() - inicio) * 1000)
+
+
+def falhas_vazias():
+    return {"perder": set(), "corromper": set(), "perder_ack": set()}
 
 
 class Conexao:
@@ -116,6 +131,7 @@ class Conexao:
         self.esperado = 0
         self.partes = []
         self.fora_de_ordem = {}
+        self.falhas = falhas_vazias()
         self.thread = threading.Thread(target=self._receber, daemon=True)
 
     def log(self, texto, cor=None):
@@ -158,8 +174,26 @@ class Conexao:
             return False
 
 
-    def _enviar_pacote(self, pacote):
+    def _enviar_pacote(self, pacote, indice):
         self.log(f'Enviando pacote seq={pacote["seq"]} payload="{pacote["payload"]}"', AZUL)
+
+        if indice in self.falhas["perder"]:
+            self.falhas["perder"].discard(indice)
+            self.aviso(f"[SIMULAÇÃO] Pacote seq={pacote['seq']} perdido no canal (não foi entregue).")
+            return
+
+        if indice in self.falhas["corromper"]:
+            self.falhas["corromper"].discard(indice)
+            copia = dict(pacote)
+            original = copia["payload"]
+            copia["payload"] = ("1" if original[0] == "0" else "0") + original[1:]
+            self.aviso(
+                f"[SIMULAÇÃO] Pacote seq={pacote['seq']} corrompido no canal "
+                f'(payload "{original}" virou "{copia["payload"]}").'
+            )
+            self._enviar(copia)
+            return
+
         self._enviar(pacote)
 
     def _tratar_timeout(self, pacotes, base, proximo, prazos):
@@ -168,17 +202,18 @@ class Conexao:
         if self.protocolo == "GBN":
             self.aviso(f"Pacote {pacotes[base]['seq']} excedeu o tempo de envio. Reenviando...")
             for indice in range(base, proximo):
-                self._enviar_pacote(pacotes[indice])
+                self._enviar_pacote(pacotes[indice], indice)
                 prazos[indice] = time.monotonic() + TIMEOUT
             return
 
         for indice in sorted(prazos):
             if prazos[indice] <= agora:
                 self.aviso(f"Pacote {pacotes[indice]['seq']} excedeu o tempo de envio. Reenviando...")
-                self._enviar_pacote(pacotes[indice])
+                self._enviar_pacote(pacotes[indice], indice)
                 prazos[indice] = time.monotonic() + TIMEOUT
 
-    def enviar_mensagem(self, mensagem, tamanho):
+    def enviar_mensagem(self, mensagem, tamanho, falhas=None):
+        self.falhas = falhas if falhas else falhas_vazias()
         seq_inicial = self.seq_envio
         pacotes = montar_pacotes(mensagem, tamanho, seq_inicial)
         total = len(pacotes)
@@ -198,7 +233,7 @@ class Conexao:
                 fim_lote = min(total, proximo + self.janela)
                 inicio_lote = time.monotonic()
                 while proximo < fim_lote:
-                    self._enviar_pacote(pacotes[proximo])
+                    self._enviar_pacote(pacotes[proximo], proximo)
                     inicio_envio[proximo] = time.monotonic()
                     prazos[proximo] = inicio_envio[proximo] + TIMEOUT
                     proximo += 1
@@ -212,6 +247,11 @@ class Conexao:
 
             indice = (ack - seq_inicial) % LIMITE_SEQ
             if indice >= proximo:
+                continue
+
+            if indice in self.falhas["perder_ack"]:
+                self.falhas["perder_ack"].discard(indice)
+                self.aviso(f"[SIMULAÇÃO] ACK ack={ack} perdido no canal (descartado pelo remetente).")
                 continue
 
             if self.protocolo == "GBN":
@@ -237,6 +277,7 @@ class Conexao:
                 self.sucesso(f"Lote enviado corretamente (ACK) time={tempo_ms(inicio_lote)}ms")
 
         self.seq_envio = (seq_inicial + total) % LIMITE_SEQ
+        self.falhas = falhas_vazias()
         return True
 
     def encerrar(self):
@@ -325,8 +366,14 @@ class Conexao:
                 self._enviar({"tipo": "ACK", "ack": (self.seq_recebimento + self.esperado - 1) % LIMITE_SEQ})
             return
 
+        try:
+            texto = aplicar_xor(bytes.fromhex(payload), seq).decode("utf-8")
+        except ValueError:
+            self.aviso(f"Pacote seq={seq} não pôde ser decifrado. Descartado.")
+            return
+
         if self.modo == "lote":
-            self.log(f'Pacote recebido: seq={seq} checksum=0x{checksum:08X} payload="{payload}"', AMARELO)
+            self.log(f'Pacote recebido: seq={seq} checksum=0x{checksum:08X} cifrado={payload} payload="{texto}"', AMARELO)
         else:
             self.log(f"Pacote recebido: seq={seq} checksum=0x{checksum:08X}", AMARELO)
 
@@ -334,20 +381,24 @@ class Conexao:
             if indice == self.esperado:
                 self.esperado += 1
                 self._enviar({"tipo": "ACK", "ack": seq})
-                self._entregar(payload, mensagem["fim"])
+                self._entregar(texto, mensagem["fim"])
             else:
-                self.aviso(f"Pacote seq={seq} fora de ordem. Descartado.")
+                if indice < self.esperado:
+                    self.aviso(f"Pacote seq={seq} duplicado (já entregue). Descartado.")
+                else:
+                    self.aviso(f"Pacote seq={seq} fora de ordem. Descartado.")
                 if self.esperado > 0:
                     self._enviar({"tipo": "ACK", "ack": (self.seq_recebimento + self.esperado - 1) % LIMITE_SEQ})
         else:
             if self.esperado <= indice < self.esperado + self.janela:
-                self.fora_de_ordem[indice] = (payload, mensagem["fim"])
+                self.fora_de_ordem[indice] = (texto, mensagem["fim"])
                 self._enviar({"tipo": "ACK", "ack": seq})
                 while self.esperado in self.fora_de_ordem:
                     trecho, ultimo = self.fora_de_ordem.pop(self.esperado)
                     self.esperado += 1
                     self._entregar(trecho, ultimo)
             elif indice < self.esperado:
+                self.aviso(f"Pacote seq={seq} duplicado (já entregue). Reenviando ACK.")
                 self._enviar({"tipo": "ACK", "ack": seq})
 
 
@@ -389,12 +440,43 @@ def pedir_tamanho(fila, conexao):
         print(f"O tamanho deve ser um número entre 1 e {TAMANHO_MAX_PAYLOAD}.")
 
 
+def pedir_indices(fila, conexao, pergunta, total):
+    while True:
+        conexao.log(f"{pergunta} (ex: 1,3 | Enter para nenhum):")
+        linha = proxima_linha(fila, conexao)
+        if linha is None or linha is FIM_TECLADO:
+            return linha
+        linha = linha.strip()
+        if not linha:
+            return set()
+        partes = [parte.strip() for parte in linha.split(",")]
+        if all(parte.isdigit() and int(parte) < total for parte in partes):
+            return {int(parte) for parte in partes}
+        print(f"Digite índices entre 0 e {total - 1}, separados por vírgula.")
+
+
+def pedir_falhas(fila, conexao, total):
+    conexao.log(f"Simulação de falhas: a mensagem terá {total} pacotes (índices 0 a {total - 1}).")
+    falhas = falhas_vazias()
+    perguntas = [
+        ("perder", "Pacotes a PERDER"),
+        ("corromper", "Pacotes a CORROMPER"),
+        ("perder_ack", "ACKs a PERDER"),
+    ]
+    for chave, pergunta in perguntas:
+        resposta = pedir_indices(fila, conexao, pergunta, total)
+        if resposta is None or resposta is FIM_TECLADO:
+            return resposta
+        falhas[chave] = resposta
+    return falhas
+
+
 def esperar_encerramento(conexao):
     while not conexao.encerrada.wait(0.2):
         pass
 
 
-def conversar(conexao, fila, sair_no_fim_do_teclado=True):
+def conversar(conexao, fila, sair_no_fim_do_teclado=True, simular=False):
     conexao.iniciar()
     print()
 
@@ -429,8 +511,18 @@ def conversar(conexao, fila, sair_no_fim_do_teclado=True):
                     esperar_encerramento(conexao)
                 return
 
+            falhas = None
+            if simular:
+                total = -(-len(linha) // tamanho)
+                falhas = pedir_falhas(fila, conexao, total)
+                if falhas is None:
+                    return
+                if falhas is FIM_TECLADO:
+                    conexao.encerrar()
+                    return
+
             print()
-            if not conexao.enviar_mensagem(linha, tamanho):
+            if not conexao.enviar_mensagem(linha, tamanho, falhas):
                 return
     finally:
         conexao.fechar()    
