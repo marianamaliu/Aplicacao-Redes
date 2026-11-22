@@ -20,6 +20,7 @@ AMARELO = "\033[93m"
 RESET = "\033[0m"
 
 FIM_TECLADO = object()
+TRAVA_TELA = threading.Lock()
 
 
 def colorir(texto, cor):
@@ -136,13 +137,16 @@ class Conexao:
 
     def log(self, texto, cor=None):
         linha = f"[{self.nome}] {texto}"
-        print(colorir(linha, cor) if cor else linha, flush=True)
+        with TRAVA_TELA:
+            print(colorir(linha, cor) if cor else linha, flush=True)
 
     def aviso(self, texto):
-        print(colorir(f"[WARNING] {texto}", VERMELHO), flush=True)
+        with TRAVA_TELA:
+            print(colorir(f"[WARNING] {texto}", VERMELHO), flush=True)
 
     def sucesso(self, texto):
-        print(colorir(f"[SUCCESS] {texto}", VERDE), flush=True)
+        with TRAVA_TELA:
+            print(colorir(f"[SUCCESS] {texto}", VERDE), flush=True)
 
     def iniciar(self):
         self.thread.start()
@@ -212,6 +216,20 @@ class Conexao:
                 self._enviar_pacote(pacotes[indice], indice)
                 prazos[indice] = time.monotonic() + TIMEOUT
 
+    def _tratar_nack(self, pacotes, indice, base, proximo, confirmados, prazos):
+        if indice < base or confirmados[indice]:
+            return
+
+        if self.protocolo == "GBN":
+            reenviar = range(indice, proximo)
+        else:
+            reenviar = [indice]
+
+        self.aviso(f"Pacote {pacotes[indice]['seq']} chegou corrompido (NACK). Reenviando sem esperar o timeout...")
+        for posicao in reenviar:
+            self._enviar_pacote(pacotes[posicao], posicao)
+            prazos[posicao] = time.monotonic() + TIMEOUT
+
     def enviar_mensagem(self, mensagem, tamanho, falhas=None):
         self.falhas = falhas if falhas else falhas_vazias()
         seq_inicial = self.seq_envio
@@ -240,13 +258,17 @@ class Conexao:
 
             prazo = prazos[base] if self.protocolo == "GBN" else min(prazos.values())
             try:
-                ack = self.acks.get(timeout=max(0.0, prazo - time.monotonic()))
+                tipo, ack = self.acks.get(timeout=max(0.0, prazo - time.monotonic()))
             except queue.Empty:
                 self._tratar_timeout(pacotes, base, proximo, prazos)
                 continue
 
             indice = (ack - seq_inicial) % LIMITE_SEQ
             if indice >= proximo:
+                continue
+
+            if tipo == "NACK":
+                self._tratar_nack(pacotes, indice, base, proximo, confirmados, prazos)
                 continue
 
             if indice in self.falhas["perder_ack"]:
@@ -317,7 +339,11 @@ class Conexao:
                 if tipo == "ACK":
                     if eh_inteiro(mensagem.get("ack")):
                         self.log(f"ACK recebido: ack={mensagem['ack']}")
-                        self.acks.put(mensagem["ack"])
+                        self.acks.put(("ACK", mensagem["ack"]))
+                elif tipo == "NACK":
+                    if eh_inteiro(mensagem.get("nack")):
+                        self.log(f"NACK recebido: nack={mensagem['nack']}", VERMELHO)
+                        self.acks.put(("NACK", mensagem["nack"]))
                 elif tipo == "FIN_ACK":
                     self.fin_acks.put(mensagem.get("ack"))
                 elif tipo == "FIN":
@@ -360,16 +386,16 @@ class Conexao:
         if checksum != mensagem["checksum"]:
             self.aviso(
                 f"Pacote seq={seq} corrompido "
-                f"(checksum recebido=0x{mensagem['checksum']:08X}, calculado=0x{checksum:08X}). Descartado."
+                f"(checksum recebido=0x{mensagem['checksum']:08X}, calculado=0x{checksum:08X}). Descartado; enviando NACK."
             )
-            if self.protocolo == "GBN" and self.esperado > 0:
-                self._enviar({"tipo": "ACK", "ack": (self.seq_recebimento + self.esperado - 1) % LIMITE_SEQ})
+            self._enviar({"tipo": "NACK", "nack": seq})
             return
 
         try:
             texto = aplicar_xor(bytes.fromhex(payload), seq).decode("utf-8")
         except ValueError:
-            self.aviso(f"Pacote seq={seq} não pôde ser decifrado. Descartado.")
+            self.aviso(f"Pacote seq={seq} não pôde ser decifrado. Descartado; enviando NACK.")
+            self._enviar({"tipo": "NACK", "nack": seq})
             return
 
         if self.modo == "lote":
