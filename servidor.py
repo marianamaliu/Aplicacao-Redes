@@ -146,7 +146,7 @@ def atender_cliente(conexao, endereco, teclado):
         conexao.close()
         return
 
-    conversar(Conexao(conexao, leitor, "SERVIDOR", sessao), teclado, sair_no_fim_do_teclado=False)
+    conversar(Conexao(conexao, leitor, "SERVIDOR", sessao), teclado, sair_no_fim_do_teclado=False, controla_janela=True)
 
 
 def main():

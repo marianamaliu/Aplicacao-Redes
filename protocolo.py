@@ -12,6 +12,7 @@ NOMES_MODO = {"individual": "isolado", "lote": "em lote"}
 TIMEOUT = 1.0
 TENTATIVAS_FIN = 5
 TAMANHO_MAX_PAYLOAD = 4
+JANELA_MAXIMA = 5
 
 AZUL = "\033[94m"
 VERMELHO = "\033[91m"
@@ -120,6 +121,7 @@ class Conexao:
         self.protocolo = sessao["protocolo"]
         self.max_texto = sessao["max_texto"]
         self.janela = sessao["janela"] if self.modo == "lote" else 1
+        self.janela_recepcao = JANELA_MAXIMA if self.modo == "lote" else 1
         self.seq_envio = sessao["seq_envio"]
         self.seq_recebimento = sessao["seq_recebimento"]
 
@@ -344,6 +346,8 @@ class Conexao:
                     if eh_inteiro(mensagem.get("nack")):
                         self.log(f"NACK recebido: nack={mensagem['nack']}", VERMELHO)
                         self.acks.put(("NACK", mensagem["nack"]))
+                elif tipo == "JANELA":
+                    self._tratar_janela(mensagem)
                 elif tipo == "FIN_ACK":
                     self.fin_acks.put(mensagem.get("ack"))
                 elif tipo == "FIN":
@@ -354,6 +358,21 @@ class Conexao:
                     self.aviso("Mensagem fora do formato esperado. Ignorada.")
         except (ConnectionError, ValueError, OSError) as erro:
             self._perder(erro)
+
+    def _tratar_janela(self, mensagem):
+        nova = mensagem.get("janela")
+        if not eh_inteiro(nova) or not 1 <= nova <= JANELA_MAXIMA:
+            self.aviso(f"Tamanho de janela inválido recebido ({nova}). Ignorado.")
+            return
+        if self.modo != "lote":
+            self.log(f"Servidor anunciou janela={nova}, mas o modo individual usa sempre janela 1.")
+            return
+        self.janela = nova
+        self.log(f"Janela ajustada pelo servidor: janela={nova} (vale a partir do próximo lote)", VERDE)
+
+    def ajustar_janela(self, nova):
+        if self._enviar({"tipo": "JANELA", "janela": nova}):
+            self.log(f"Janela anunciada ao cliente: janela={nova}", VERDE)
 
     def _tratar_fin(self, mensagem):
         seq_fin = (self.seq_recebimento + self.esperado) % LIMITE_SEQ
@@ -416,7 +435,7 @@ class Conexao:
                 if self.esperado > 0:
                     self._enviar({"tipo": "ACK", "ack": (self.seq_recebimento + self.esperado - 1) % LIMITE_SEQ})
         else:
-            if self.esperado <= indice < self.esperado + self.janela:
+            if self.esperado <= indice < self.esperado + self.janela_recepcao:
                 self.fora_de_ordem[indice] = (texto, mensagem["fim"])
                 self._enviar({"tipo": "ACK", "ack": seq})
                 while self.esperado in self.fora_de_ordem:
@@ -502,9 +521,19 @@ def esperar_encerramento(conexao):
         pass
 
 
-def conversar(conexao, fila, sair_no_fim_do_teclado=True, simular=False):
+def tratar_comando_janela(conexao, linha):
+    partes = linha.split()
+    if len(partes) == 2 and partes[1].isdigit() and 1 <= int(partes[1]) <= JANELA_MAXIMA:
+        conexao.ajustar_janela(int(partes[1]))
+    else:
+        print(f"Uso: /janela N (N entre 1 e {JANELA_MAXIMA})")
+
+
+def conversar(conexao, fila, sair_no_fim_do_teclado=True, simular=False, controla_janela=False):
     conexao.iniciar()
     print()
+    if controla_janela:
+        conexao.log(f"Use '/janela N' (1 a {JANELA_MAXIMA}) para ajustar a janela do cliente.")
 
     try:
         while True:
@@ -521,6 +550,9 @@ def conversar(conexao, fila, sair_no_fim_do_teclado=True, simular=False):
                 return
             if not linha:
                 print("A mensagem não pode ser vazia.")
+                continue
+            if controla_janela and linha.strip().lower().startswith("/janela"):
+                tratar_comando_janela(conexao, linha)
                 continue
             if len(linha) > conexao.max_texto:
                 print(f"A mensagem tem {len(linha)} caracteres; o máximo é {conexao.max_texto}.")

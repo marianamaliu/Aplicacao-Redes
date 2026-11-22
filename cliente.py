@@ -4,7 +4,7 @@ import os
 import sys
 
 from protocolo import (
-    LIMITE_SEQ, MODOS, PROTOCOLOS, LeitorMensagens, Conexao,
+    LIMITE_SEQ, MODOS, PROTOCOLOS, JANELA_MAXIMA, LeitorMensagens, Conexao,
     eh_inteiro, proximo_seq, enviar_msg, receber_msg, iniciar_teclado, conversar,
 )
 
@@ -48,7 +48,7 @@ def validar_syn_ack(mensagem, client_isn, syn):
             return False, f"Servidor respondeu com '{campo}' diferente do solicitado"
 
     janela = mensagem.get("janela")
-    if not eh_inteiro(janela) or janela < 1:
+    if not eh_inteiro(janela) or not 1 <= janela <= JANELA_MAXIMA:
         return False, "Tamanho de janela inválido"
 
     return True, "SYN-ACK válido"
