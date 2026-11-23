@@ -261,6 +261,8 @@ Diffie-Hellman.
 
 ## 5. Simulador de erros e perdas
 
+FEITOS NO 8
+
 ### 5.1 Funcionamento
 
 Como o TCP por baixo da aplicação nunca perde nem corrompe dados, as falhas
@@ -488,6 +490,16 @@ no servidor.
 | 10 | lote / SR | servidor executa `/janela 2` entre duas mensagens | a primeira mensagem sai em um lote de 5; a segunda, em lotes de 2, 2 e 1 |
 | 11 | lote / GBN | nenhuma | caminho sem erros, um lote de 5 |
 
+#### Teste — Simulação de falhas combinadas (GBN)
+
+Neste teste, foram simuladas a perda de um pacote, sua corrupção durante a retransmissão e a perda de um ACK, utilizando o protocolo Go-Back-N (GBN).
+
+A aplicação demonstrou o funcionamento do temporizador, a detecção de corrupção pelo CRC-16, o reconhecimento negativo (NACK) e a retransmissão dos pacotes afetados.
+
+Ao final, o servidor reconstruiu corretamente a mensagem original, confirmando a recuperação das falhas simuladas.
+
+![Teste de falhas combinadas GBN](imagens/perdaack.png)
+
 ### Exemplo: perda do pacote 2 no GBN (cenário 1)
 
 ```text
@@ -521,6 +533,7 @@ no servidor.
 [SERVIDOR] Pacote recebido: seq=3179937361 payload="bem?"
 [SERVIDOR] Mensagem completa: "olá mundo, tudo bem?"
 ```
+![teste](imagens/simulação2.png)
 
 ### Exemplo: a mesma perda no SR (cenário 2)
 
@@ -539,6 +552,8 @@ no servidor.
 A comparação entre os dois exemplos mostra a diferença central entre os
 protocolos: com a mesma perda, o GBN reenvia três pacotes e o SR reenvia
 apenas um.
+![teste](imagens/SR.png)
+
 
 ### Exemplo: corrupção com NACK (cenário 4)
 
@@ -553,6 +568,7 @@ apenas um.
 ```text
 [WARNING] Pacote seq=1022497698 corrompido (checksum recebido=0x..., calculado=0x...). Descartado; enviando NACK.
 ```
+![teste](imagens/corromper.png)
 
 ### Exemplo: perda de ACK e duplicado (cenário 5)
 
@@ -563,10 +579,22 @@ apenas um.
 [WARNING] Pacote seq=2627237310 duplicado (já entregue). Reenviando ACK.
 ```
 
-> **Prints:** adicionar à pasta `imagens/` capturas de tela dos cenários 1, 2,
-> 3, 5 e 10, nos dois terminais.
+![alt text](imagens/ackperdido.png)
 
 ---
+
+### Exemplo: alteração dinâmica da janela (cenário 10)
+
+Neste teste, o servidor alterou o tamanho da janela de transmissão de 5 para 2 por meio do comando `/janela 2`.
+
+O cliente recebeu a atualização e passou a enviar os cinco pacotes em três lotes: 2, 2 e 1.
+
+Todos os pacotes foram confirmados por ACK, e o servidor reconstruiu corretamente a mensagem original.
+
+![Teste 10 - Alteração dinâmica da janela](imagens/teste1.png)
+![Teste 10 - Alteração dinâmica da janela](imagens/teste2.png)
+---
+
 
 ## 9. Evolução da implementação
 
@@ -687,19 +715,30 @@ enunciado da pontuação extra, a IA apontou que o checksum ainda usava o
 `zlib.crc32`, o que não contaria como algoritmo "sem bibliotecas". Primeiro
 decidimos manter o `zlib`; depois mudamos de ideia e implementamos o CRC-16.
 
+### O que pensamos durante o desenvolvimento
+
+Durante o desenvolvimento do Checkpoint 3, nossa principal preocupação foi garantir que o sistema não apenas simulasse os erros, mas também conseguisse se recuperar deles corretamente. Como já tínhamos implementado a comunicação entre cliente e servidor nos checkpoints anteriores, nosso foco passou a ser a confiabilidade da transmissão.
+
+Uma das principais decisões foi implementar as falhas de maneira controlada, permitindo escolher quais pacotes seriam perdidos ou corrompidos e quais ACKs seriam descartados. Pensamos que isso facilitaria os testes, pois conseguiríamos reproduzir situações específicas e comparar o comportamento dos protocolos GBN e SR.
+
+Também consideramos importante que as falhas não acontecessem novamente durante todas as retransmissões, pois isso poderia dificultar a demonstração da recuperação. Por isso, decidimos que cada falha configurada seria aplicada apenas uma vez.
+
+Outro ponto que discutimos foi a diferença entre perda e corrupção de pacotes. Entendemos que não faria sentido enviar um NACK para um pacote que nunca chegou ao destinatário. Assim, mantivemos o timeout para tratar perdas e utilizamos o NACK quando o checksum identificava corrupção.
+
+Nos testes, percebemos que não bastava aparecer uma mensagem de sucesso no terminal. Era necessário verificar se os pacotes corretos estavam sendo retransmitidos, se o servidor identificava duplicatas e se a mensagem final era reconstruída sem alterações.
+
+Por fim, o uso da IA nos ajudou principalmente a analisar essas decisões e identificar possíveis problemas na lógica. Entretanto, também percebemos que suas respostas precisavam ser verificadas, especialmente nos cálculos do CRC-16. Isso reforçou a importância de testar o código e compreender o funcionamento de cada mecanismo implementado.
+
 ### Prompts utilizados
 
 1. Me auxilie para que eu consiga implementar esse último checkpoint, não
    implemente sozinho, quero entender como fazer e o que está acontecendo.
-2. Não podemos esquecer que preciso garantir essa pontuação: *(trecho da
-   pontuação extra do enunciado)*.
-3. Vamos fazer XOR com chave, vá me guiando.
-4. Vamos seguir com o NACK.
-5. Garante o ponto extra? / As coisas que precisam ser implementadas para
+2. Vamos fazer XOR com chave, vá me guiando.
+3. Vamos seguir com o NACK.
+4. Garante o ponto extra? / As coisas que precisam ser implementadas para
     garantir os pontos extras foram implementadas?
-6. Vamos fazer o CRC-16 agora. Vou fazer, mas
+5. Vamos fazer o CRC-16 agora. Vou fazer, mas
     preciso de mais ajuda sua.
-7. Baseado nos outros 2 relatórios, faça esse último relatório.
 
 ### Decisões tomadas a partir das respostas da IA
 
@@ -753,3 +792,7 @@ nenhuma biblioteca de checksum ou criptografia.
 Com isso, a aplicação cobre todas as características do transporte confiável
 pedidas no enunciado: soma de verificação, temporizador, número de sequência,
 reconhecimento positivo e negativo, e janela com paralelismo.
+
+## 12. crc mudança
+
+![CRC16](imagens/CRC16.png)
