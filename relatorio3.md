@@ -600,7 +600,7 @@ para que pudéssemos apresentar e defender o código. Na prática:
 * a IA desenhou as máquinas de estados do remetente e do destinatário
   (seção 6) a partir do código, e nós as usamos para conferir se cada
   caminho do código tinha um teste correspondente;
-* nas partes de integração (simulador, NACK e janela), a IA implementou e
+* nas partes de integração (simulador, NACK e janela), a IA auxiliou para implementar e
   explicou cada mudança; nós revisamos, rodamos os testes nas quatro
   combinações de modo e protocolo e preparamos a explicação para a arguição.
 
