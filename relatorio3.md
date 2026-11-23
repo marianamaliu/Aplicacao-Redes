@@ -694,23 +694,12 @@ decidimos manter o `zlib`; depois mudamos de ideia e implementamos o CRC-16.
 2. Não podemos esquecer que preciso garantir essa pontuação: *(trecho da
    pontuação extra do enunciado)*.
 3. Vamos fazer XOR com chave, vá me guiando.
-4. No lugar de `___` coloco o quê?
-5. Como eu testo agora?
-6. Mas está certo então?
-7. Vamos fazer o passo 3. / Agora está funcionando?
-8. Vamos implementar no código, mas vá me ensinando aos poucos o que está
-   acontecendo para eu explicar na minha apresentação.
-9. Faça isso pra mim (integração da cifra no recebimento).
-10. Pode deixar o checksum usando a lib, mas o que falta para finalizar o
-    projeto? *(enviamos o enunciado completo)*
-11. Vamos seguir com o NACK.
-12. Vamos para o item 3 (janela).
-13. Garante o ponto extra? / As coisas que precisam ser implementadas para
+4. Vamos seguir com o NACK.
+5. Garante o ponto extra? / As coisas que precisam ser implementadas para
     garantir os pontos extras foram implementadas?
-14. Vamos fazer o CRC-16 agora. / Pode criar essa função. / Quero fazer, mas
+6. Vamos fazer o CRC-16 agora. Vou fazer, mas
     preciso de mais ajuda sua.
-15. O que é o CRC-16?
-16. Baseado nos outros 2 relatórios, faça esse último relatório.
+7. Baseado nos outros 2 relatórios, faça esse último relatório.
 
 ### Decisões tomadas a partir das respostas da IA
 
