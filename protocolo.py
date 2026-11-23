@@ -3,7 +3,6 @@ import json
 import queue
 import threading
 import time
-import zlib
 
 LIMITE_SEQ = 1 << 32
 MODOS = ["individual", "lote"]
@@ -36,8 +35,21 @@ def proximo_seq(numero):
     return (numero + 1) % LIMITE_SEQ
 
 
+def crc16(dados):
+    registrador = 0xFFFF
+    for byte in dados:
+        registrador ^= (byte << 8)
+        for _ in range(8):
+            if registrador & 0x8000:
+                registrador = (registrador << 1) ^ 0x1021
+            else:
+                registrador = (registrador << 1)
+            registrador &= 0xFFFF
+    return registrador
+
+
 def calcular_checksum(payload):
-    return zlib.crc32(payload.encode("utf-8"))
+    return crc16(payload.encode("utf-8"))
 
 CHAVE = b"AtividadeRedes01" 
 
@@ -405,7 +417,7 @@ class Conexao:
         if checksum != mensagem["checksum"]:
             self.aviso(
                 f"Pacote seq={seq} corrompido "
-                f"(checksum recebido=0x{mensagem['checksum']:08X}, calculado=0x{checksum:08X}). Descartado; enviando NACK."
+                f"(checksum recebido=0x{mensagem['checksum']:04X}, calculado=0x{checksum:04X}). Descartado; enviando NACK."
             )
             self._enviar({"tipo": "NACK", "nack": seq})
             return
@@ -418,9 +430,9 @@ class Conexao:
             return
 
         if self.modo == "lote":
-            self.log(f'Pacote recebido: seq={seq} checksum=0x{checksum:08X} cifrado={payload} payload="{texto}"', AMARELO)
+            self.log(f'Pacote recebido: seq={seq} checksum=0x{checksum:04X} cifrado={payload} payload="{texto}"', AMARELO)
         else:
-            self.log(f"Pacote recebido: seq={seq} checksum=0x{checksum:08X}", AMARELO)
+            self.log(f"Pacote recebido: seq={seq} checksum=0x{checksum:04X}", AMARELO)
 
         if self.protocolo == "GBN":
             if indice == self.esperado:
